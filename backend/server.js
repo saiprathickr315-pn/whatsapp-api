@@ -4,6 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
+const { jidNormalizedUser } = require('@whiskeysockets/baileys');
 const WhatsAppManager = require('./whatsapp');
 const { loadAccountsMeta, saveAccountsMeta } = require('./accountStore');
 
@@ -66,7 +67,12 @@ const manager = new WhatsAppManager(accounts, {
 // etc.) every 5 minutes to keep the service from sleeping on free hosting
 // tiers — that sleep/wake cycle is the single biggest cause of unexpected
 // WhatsApp logouts on platforms like Render's free plan.
-app.get('/ping', (req, res) => res.json({ ok: true, accounts: Object.keys(accounts).length }));
+// Bump this string whenever a meaningful backend fix ships. Hit /ping after
+// a deploy and check this field — if it doesn't match, the deploy didn't
+// actually take (old process still running, wrong branch, cache, etc).
+const BUILD_TAG = 'lid-routing-fix-2026-07-19';
+
+app.get('/ping', (req, res) => res.json({ ok: true, build: BUILD_TAG, accounts: Object.keys(accounts).length }));
 
 // ─── FRONTEND ROUTES ───────────────────────────────────────────────────────────
 app.get('/', (req, res) => {
@@ -201,37 +207,26 @@ function enqueueSend(acc, taskFn) {
   return acc.sendQueue;
 }
 
-// ─── REAL NUMBER RESOLUTION ──────────────────────────────────────────────────
-// Instead of guessing "number@s.whatsapp.net", ask WhatsApp directly whether
-// this number exists and what its correct JID actually is. More reliable
-// than string-guessing, especially for numbers WhatsApp may route
-// differently (e.g. business accounts, some @lid-linked contacts).
+// ─── SEND-TARGET NORMALIZATION ────────────────────────────────────────────
 async function resolveSendJid(sock, to) {
   // Already a full JID (e.g. replying to a specific "...@lid" or
-  // "...@s.whatsapp.net" address from an incoming message) — trust it as-is,
-  // except: a raw "@lid" is unreliable to send to directly. Safety net: try
-  // resolving it to the real PN JID first (whatsapp.js's _parseMessage
-  // already prefers senderPn for new incoming messages, so this mainly
-  // covers older stored data or direct API calls with a raw @lid).
+  // "...@s.whatsapp.net" address from an incoming message) — trust it as-is.
+  // NOTE: earlier versions of this tried to resolve "@lid" JIDs back to a
+  // phone-number JID before sending. Baileys' current guidance for this
+  // version is the opposite: LIDs are the primary, reliable address now,
+  // and resolving to a PN JID is what caused messages to get stuck
+  // undecryptable on the recipient's phone (a resolved PN JID can end up
+  // device-suffixed and not match the session the recipient's phone
+  // actually has open). So: keep whatever JID we were given, just
+  // normalized (device suffix stripped) via jidNormalizedUser.
   if (typeof to === 'string' && to.includes('@')) {
-    if (to.endsWith('@lid') && sock.signalRepository?.lidMapping?.getPNForLID) {
-      try {
-        const pn = await sock.signalRepository.lidMapping.getPNForLID(to);
-        if (pn) {
-          console.log(`[resolve] ${to} -> resolved to real JID ${pn} before sending`);
-          return pn;
-        }
-      } catch (e) {
-        // no mapping available — fall through and send to the raw @lid as last resort
-      }
-    }
-    return to;
+    return jidNormalizedUser(to) || to;
   }
   const num = String(to).replace(/[^0-9]/g, '');
   try {
     const results = await sock.onWhatsApp(num);
     if (results && results[0] && results[0].exists && results[0].jid) {
-      return results[0].jid;
+      return jidNormalizedUser(results[0].jid) || results[0].jid;
     }
   } catch (e) {
     // WhatsApp lookup failed/unsupported — fall back to the naive guess below.

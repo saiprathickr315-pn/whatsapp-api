@@ -277,34 +277,37 @@ class WhatsAppManager {
     const jid = jidNormalizedUser(rawJid) || rawJid;
     const isLid = jid.endsWith('@lid');
 
-    // ── The actual @lid delivery fix ──────────────────────────────────
-    // WhatsApp attaches the real phone-number JID directly on the message
-    // key as `senderPn` for LID-addressed direct chats (Baileys v7+) — no
-    // async lookup needed. This is far more reliable than
-    // signalRepository.lidMapping, which is best-effort. Sending replies
-    // straight to a raw "@lid" JID can return success from Baileys with no
-    // thrown error, yet the message never actually reaches the recipient's
-    // phone — a known Baileys behavior. Preferring senderPn fixes that.
+    // ── @lid routing fix ─────────────────────────────────────────────
+    // Earlier versions of this file resolved LID-addressed chats back to a
+    // phone-number JID (via senderPn) before replying, on the theory that
+    // raw @lid sends were unreliable. Baileys' own current migration
+    // guidance for this version says the opposite: LIDs are the primary,
+    // reliable addressing now, and converting back to a PN JID is what's
+    // flaky (it's how the "916366296464:0@s.whatsapp.net" device-suffixed
+    // dead-end JIDs were happening — senderPn can carry a device suffix,
+    // and even normalized, a resolved PN session doesn't always match the
+    // one the recipient's phone actually has open). So: always reply using
+    // the LID itself (device-suffix stripped) — Baileys handles the
+    // LID<->session mapping internally. senderPn is kept ONLY for a
+    // human-readable "from" number, never for routing the reply.
     let replyJid = jid;
     let resolvedNumber = null;
     if (isLid) {
       if (msg.key.senderPn) {
-        replyJid = jidNormalizedUser(msg.key.senderPn) || msg.key.senderPn;
-        resolvedNumber = replyJid.split('@')[0];
+        const pnJid = jidNormalizedUser(msg.key.senderPn) || msg.key.senderPn;
+        resolvedNumber = pnJid.split('@')[0];
       } else {
         resolvedNumber = await this._resolveRealNumber(sock, jid);
-        if (resolvedNumber) replyJid = `${resolvedNumber}@s.whatsapp.net`;
-        // else: no senderPn AND no mapping available — replyJid stays as
-        // the raw @lid, which is the last-resort fallback (may not deliver).
       }
+      // replyJid stays as the (already device-suffix-stripped) lid — see above.
     } else {
       resolvedNumber = jid.split('@')[0]; // jid is already device-suffix-free from the normalization above
     }
 
     return {
       id: msg.key.id,
-      from: resolvedNumber || jid.split('@')[0], // best real number we have, or the raw lid number as fallback
-      jid: replyJid, // ALWAYS use this (not `from`) when replying — real PN JID when resolved, else raw @lid
+      from: resolvedNumber || jid.split('@')[0], // best real number we have, purely for display
+      jid: replyJid, // ALWAYS use this (not `from`) when replying — the normalized lid or PN jid
       isLid,
       pushName: msg.pushName || null,
       type,
