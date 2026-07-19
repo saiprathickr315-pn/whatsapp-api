@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Aroha Gateway · WhatsApp Dashboard</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel-2: #1f2330;
+    --border: #2a2f3d;
+    --text: #e8eaf0;
+    --muted: #8b90a3;
+    --accent: #7c5cff;
+    --accent-2: #21d4a8;
+    --danger: #ff5c7a;
+    --warn: #ffb648;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: radial-gradient(1200px 600px at 20% -10%, #201a3a 0%, var(--bg) 55%);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 32px 20px 80px;
+  }
+  header {
+    max-width: 1000px;
+    margin: 0 auto 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand .logo {
+    width: 40px; height: 40px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 18px;
+  }
+  .brand h1 { font-size: 20px; margin: 0; }
+  .brand span { color: var(--muted); font-size: 13px; }
+  main { max-width: 1000px; margin: 0 auto; }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .panel h2 { margin: 0 0 14px; font-size: 15px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+
+  form.create { display: flex; gap: 10px; flex-wrap: wrap; }
+  input[type=text] {
+    flex: 1; min-width: 200px;
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    padding: 11px 14px; border-radius: 9px; font-size: 14px;
+  }
+  button {
+    cursor: pointer; border: none; border-radius: 9px; padding: 11px 18px;
+    font-size: 14px; font-weight: 600;
+  }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
+  .btn-danger { background: rgba(255,92,122,0.12); color: var(--danger); border: 1px solid rgba(255,92,122,0.3); }
+  .btn-small { padding: 7px 12px; font-size: 12px; }
+
+  .accounts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+  .account-card {
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 16px;
+  }
+  .account-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+  .account-name { font-weight: 700; font-size: 15px; }
+  .status-badge {
+    font-size: 11px; padding: 3px 9px; border-radius: 100px; font-weight: 700; text-transform: uppercase;
+  }
+  .status-connected { background: rgba(33,212,168,0.15); color: var(--accent-2); }
+  .status-qr_pending { background: rgba(255,182,72,0.15); color: var(--warn); }
+  .status-initializing, .status-disconnected { background: rgba(139,144,163,0.15); color: var(--muted); }
+  .status-logged_out, .status-error { background: rgba(255,92,122,0.15); color: var(--danger); }
+
+  .field { margin-bottom: 8px; }
+  .field label { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 3px; }
+  .field .value-row { display: flex; align-items: center; gap: 6px; }
+  .field .value {
+    font-family: "SF Mono", Consolas, monospace; font-size: 12.5px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 9px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .copy-btn {
+    background: var(--panel); border: 1px solid var(--border); color: var(--muted);
+    padding: 6px 9px; border-radius: 6px; font-size: 12px;
+  }
+  .copy-btn:hover { color: var(--text); }
+
+  .account-id .value { color: var(--accent); font-weight: 700; }
+
+  .qr-box { text-align: center; margin: 12px 0; }
+  .qr-box img { width: 180px; height: 180px; border-radius: 8px; background: white; padding: 8px; }
+  .qr-hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+  .account-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .empty { text-align: center; color: var(--muted); padding: 40px 0; }
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    padding: 10px 18px; border-radius: 9px; font-size: 13px; opacity: 0; transition: opacity .2s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="logo">A</div>
+    <div>
+      <h1>Aroha Gateway</h1>
+      <span>WhatsApp API dashboard — v2</span>
+    </div>
+  </div>
+  <div style="color: var(--muted); font-size: 13px;" id="pingStatus">checking server…</div>
+</header>
+
+<main>
+  <div class="panel">
+    <h2>Create Account</h2>
+    <form class="create" id="createForm">
+      <input type="text" id="nameInput" placeholder="Account name (e.g. sales team)" required />
+      <input type="text" id="webhookInput" placeholder="Webhook URL (optional)" />
+      <button type="submit" class="btn-primary">+ Add Account</button>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h2>Accounts</h2>
+    <div class="accounts-grid" id="accountsGrid">
+      <div class="empty">Loading…</div>
+    </div>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API_BASE = '';
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1600);
+}
+
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(() => toast('Copied: ' + text));
+}
+
+async function ping() {
+  try {
+    const res = await fetch(API_BASE + '/ping');
+    const data = await res.json();
+    document.getElementById('pingStatus').textContent =
+      `● online — ${data.accounts} account(s) tracked`;
+    document.getElementById('pingStatus').style.color = '#21d4a8';
+  } catch (e) {
+    document.getElementById('pingStatus').textContent = '● offline / unreachable';
+    document.getElementById('pingStatus').style.color = '#ff5c7a';
+  }
+}
+
+async function loadAccounts() {
+  const grid = document.getElementById('accountsGrid');
+  try {
+    const res = await fetch(API_BASE + '/api/accounts');
+    const accounts = await res.json();
+
+    if (!accounts.length) {
+      grid.innerHTML = '<div class="empty">No accounts yet — create one above.</div>';
+      return;
+    }
+
+    grid.innerHTML = accounts.map(renderCard).join('');
+  } catch (e) {
+    grid.innerHTML = '<div class="empty">Could not load accounts — is the server running?</div>';
+  }
+}
+
+function renderCard(a) {
+  const statusClass = 'status-' + (a.status || 'unknown');
+  return `
+    <div class="account-card">
+      <div class="account-top">
+        <div class="account-name">${escapeHtml(a.name)}</div>
+        <div class="status-badge ${statusClass}">${escapeHtml(a.status)}</div>
+      </div>
+
+      <div class="field account-id">
+        <label>Account ID</label>
+        <div class="value-row">
+          <div class="value">${a.id}</div>
+          <button class="copy-btn" onclick="copyText('${a.id}')">Copy</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Phone</label>
+        <div class="value-row">
+          <div class="value">${a.phone || '— not connected —'}</div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>API Key</label>
+        <div class="value-row">
+          <div class="value">${a.apiKey}</div>
+          <button class="copy-btn" onclick="copyText('${a.apiKey}')">Copy</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Messages received</label>
+        <div class="value-row"><div class="value">${a.messageCount ?? 0}</div></div>
+      </div>
+
+      ${a.qr ? `
+        <div class="qr-box">
+          <img src="${a.qr}" alt="QR code" />
+          <div class="qr-hint">WhatsApp → Settings → Linked Devices → Link a Device</div>
+        </div>
+      ` : ''}
+
+      <div class="account-actions">
+        <button class="btn-secondary btn-small" onclick="reconnect('${a.id}')">↺ Reconnect</button>
+        <button class="btn-danger btn-small" onclick="removeAccount('${a.id}')">✕ Remove</button>
+      </div>
+    </div>
+  `;
+}
+
+function escapeHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+async function reconnect(id) {
+  await fetch(`${API_BASE}/api/accounts/${id}/reconnect`, { method: 'POST' });
+  toast('Reconnecting…');
+  loadAccounts();
+}
+
+async function removeAccount(id) {
+  if (!confirm('Remove this account? This cannot be undone.')) return;
+  await fetch(`${API_BASE}/api/accounts/${id}`, { method: 'DELETE' });
+  toast('Account removed');
+  loadAccounts();
+}
+
+document.getElementById('createForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = document.getElementById('nameInput').value.trim();
+  const webhookUrl = document.getElementById('webhookInput').value.trim();
+  if (!name) return;
+
+  const res = await fetch(API_BASE + '/api/accounts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, webhookUrl: webhookUrl || undefined })
+  });
+  const data = await res.json();
+  if (data.error) {
+    toast('Error: ' + data.error);
+  } else {
+    toast('Account created — scan the QR when it appears');
+    document.getElementById('nameInput').value = '';
+    document.getElementById('webhookInput').value = '';
+  }
+  loadAccounts();
+});
+
+ping();
+loadAccounts();
+setInterval(ping, 10000);
+setInterval(loadAccounts, 4000);
+</script>
+
+</body>
+</html>
