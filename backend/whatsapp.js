@@ -3,7 +3,8 @@ const {
   DisconnectReason,
   useMultiFileAuthState,
   makeCacheableSignalKeyStore,
-  fetchLatestBaileysVersion
+  fetchLatestBaileysVersion,
+  jidNormalizedUser
 } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode');
 const pino = require('pino');
@@ -261,7 +262,19 @@ class WhatsAppManager {
       return null;
     }
 
-    const jid = msg.key.remoteJid || '';
+    // ── Device-suffix fix ───────────────────────────────────────────────
+    // WhatsApp multi-device JIDs sometimes arrive as "<number>:<device>@..."
+    // (e.g. "916366296464:0@s.whatsapp.net") instead of the plain
+    // "<number>@...". Baileys' send/ack layer accepts a device-suffixed JID
+    // without error and the WhatsApp server will even ack it as
+    // "delivered" — but the encryption session for that address doesn't
+    // match the recipient's actual session, so their phone can't decrypt
+    // it and shows "Waiting for this message. This may take a while."
+    // forever. jidNormalizedUser() strips the device part while keeping
+    // the right server type (@s.whatsapp.net vs @lid) — always reply using
+    // the normalized JID, never the raw one straight off the message key.
+    const rawJid = msg.key.remoteJid || '';
+    const jid = jidNormalizedUser(rawJid) || rawJid;
     const isLid = jid.endsWith('@lid');
 
     // ── The actual @lid delivery fix ──────────────────────────────────
@@ -276,7 +289,7 @@ class WhatsAppManager {
     let resolvedNumber = null;
     if (isLid) {
       if (msg.key.senderPn) {
-        replyJid = msg.key.senderPn;
+        replyJid = jidNormalizedUser(msg.key.senderPn) || msg.key.senderPn;
         resolvedNumber = replyJid.split('@')[0];
       } else {
         resolvedNumber = await this._resolveRealNumber(sock, jid);
@@ -285,7 +298,7 @@ class WhatsAppManager {
         // the raw @lid, which is the last-resort fallback (may not deliver).
       }
     } else {
-      resolvedNumber = jid.split('@')[0];
+      resolvedNumber = jid.split('@')[0]; // jid is already device-suffix-free from the normalization above
     }
 
     return {
