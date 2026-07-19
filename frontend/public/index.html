@@ -113,6 +113,29 @@
     pointer-events: none;
   }
   .toast.show { opacity: 1; }
+
+  .hidden { display: none; }
+  .send-box, .usage-box {
+    margin-top: 12px; padding: 12px; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 10px;
+  }
+  .value-input {
+    width: 100%; background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 10px; border-radius: 7px; font-size: 13px; margin-top: 2px;
+  }
+  .code-block {
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 7px;
+    padding: 10px 12px; font-family: "SF Mono", Consolas, monospace; font-size: 11.5px;
+    white-space: pre-wrap; word-break: break-all; color: var(--accent-2); margin: 4px 0 0;
+  }
+  .delivery-log { margin-top: 10px; font-size: 12px; }
+  .delivery-row {
+    display: flex; justify-content: space-between; padding: 5px 0;
+    border-bottom: 1px solid var(--border); color: var(--muted);
+  }
+  .ack-delivered, .ack-read { color: var(--accent-2); font-weight: 700; }
+  .ack-pending, .ack-server_ack, .ack-sent_to_server { color: var(--warn); font-weight: 700; }
+  .ack-error { color: var(--danger); font-weight: 700; }
 </style>
 </head>
 <body>
@@ -129,6 +152,16 @@
 </header>
 
 <main>
+  <div class="panel">
+    <h2>Quick Start</h2>
+    <div style="color: var(--muted); font-size: 13.5px; line-height: 1.6;">
+      1. Create an account below → scan the QR with WhatsApp (<b>Settings → Linked Devices → Link a Device</b>).<br/>
+      2. Once status shows <b>connected</b>, click <b>Send test message</b> on that account's card to try it directly from here.<br/>
+      3. Click <b>Sample usage</b> on any account for ready-to-run curl / JavaScript snippets using that account's real API key.<br/>
+      4. Watch the delivery status after a send — <span class="ack-delivered">delivered</span>/<span class="ack-delivered">read</span> means WhatsApp actually got it to the phone; <span class="ack-pending">pending</span>/<span class="ack-server_ack">server_ack</span> stuck for a while usually means the account is being rate-limited or restricted by WhatsApp, not a bug here.
+    </div>
+  </div>
+
   <div class="panel">
     <h2>Create Account</h2>
     <form class="create" id="createForm">
@@ -175,8 +208,17 @@ async function ping() {
   }
 }
 
+const openPanels = new Set(); // tracks which accountIds have an open send/usage panel
+
 async function loadAccounts() {
   const grid = document.getElementById('accountsGrid');
+
+  // Don't yank the UI out from under someone mid-typing in a send box.
+  if (document.activeElement && grid.contains(document.activeElement) &&
+      document.activeElement.tagName === 'INPUT') {
+    return;
+  }
+
   try {
     const res = await fetch(API_BASE + '/api/accounts');
     const accounts = await res.json();
@@ -187,6 +229,11 @@ async function loadAccounts() {
     }
 
     grid.innerHTML = accounts.map(renderCard).join('');
+
+    // Re-open any panels the user had open before this refresh.
+    for (const key of openPanels) {
+      document.getElementById(key)?.classList.remove('hidden');
+    }
   } catch (e) {
     grid.innerHTML = '<div class="empty">Could not load accounts — is the server running?</div>';
   }
@@ -239,6 +286,50 @@ function renderCard(a) {
       <div class="account-actions">
         <button class="btn-secondary btn-small" onclick="reconnect('${a.id}')">↺ Reconnect</button>
         <button class="btn-danger btn-small" onclick="removeAccount('${a.id}')">✕ Remove</button>
+        <button class="btn-secondary btn-small" onclick="toggleSend('${a.id}')">✉ Send test message</button>
+        <button class="btn-secondary btn-small" onclick="toggleUsage('${a.id}')">{ } Sample usage</button>
+      </div>
+
+      ${a.status === 'connected' ? `
+      <div class="send-box hidden" id="send-${a.id}">
+        <div class="field">
+          <label>To (phone number, e.g. 9198xxxxxxx with country code)</label>
+          <input type="text" class="value-input" id="sendTo-${a.id}" placeholder="9198xxxxxxx" />
+        </div>
+        <div class="field">
+          <label>Message</label>
+          <input type="text" class="value-input" id="sendMsg-${a.id}" placeholder="Hello!" />
+        </div>
+        <button class="btn-primary btn-small" onclick="sendTest('${a.id}')">Send</button>
+        <div class="delivery-log" id="deliveryLog-${a.id}"></div>
+      </div>
+      ` : ''}
+
+      <div class="usage-box hidden" id="usage-${a.id}">
+        <div class="field">
+          <label>curl</label>
+          <pre class="code-block">curl -X POST ${window.location.origin}/api/send/text \\
+  -H "Content-Type: application/json" \\
+  -H "X-Api-Key: ${a.apiKey}" \\
+  -d '{"to": "9198xxxxxxx", "message": "Hello from ${escapeHtml(a.name)}!"}'</pre>
+        </div>
+        <div class="field">
+          <label>Node.js / JavaScript</label>
+          <pre class="code-block">await fetch("${window.location.origin}/api/send/text", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "X-Api-Key": "${a.apiKey}"
+  },
+  body: JSON.stringify({ to: "9198xxxxxxx", message: "Hello!" })
+});</pre>
+        </div>
+        <div class="field">
+          <label>Poll for incoming messages</label>
+          <pre class="code-block">curl "${window.location.origin}/api/messages?since=0" \\
+  -H "X-Api-Key: ${a.apiKey}"</pre>
+        </div>
+        <div class="qr-hint">Tip: "to" can be a plain number (with country code, no + or spaces) or a full JID copied from a received message's "jid" field.</div>
       </div>
     </div>
   `;
@@ -262,6 +353,73 @@ async function removeAccount(id) {
   await fetch(`${API_BASE}/api/accounts/${id}`, { method: 'DELETE' });
   toast('Account removed');
   loadAccounts();
+}
+
+function toggleSend(id) {
+  const key = `send-${id}`;
+  document.getElementById(key)?.classList.toggle('hidden');
+  if (openPanels.has(key)) openPanels.delete(key); else openPanels.add(key);
+}
+
+function toggleUsage(id) {
+  const key = `usage-${id}`;
+  document.getElementById(key)?.classList.toggle('hidden');
+  if (openPanels.has(key)) openPanels.delete(key); else openPanels.add(key);
+}
+
+const pollTimers = {};
+
+async function sendTest(id) {
+  const to = document.getElementById(`sendTo-${id}`).value.trim();
+  const message = document.getElementById(`sendMsg-${id}`).value.trim();
+  if (!to || !message) { toast('Enter a number and a message'); return; }
+
+  const acc = (await (await fetch(API_BASE + '/api/accounts')).json()).find(a => a.id === id);
+  if (!acc) return;
+
+  try {
+    const res = await fetch(API_BASE + '/api/send/text', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Api-Key': acc.apiKey },
+      body: JSON.stringify({ to, message })
+    });
+    const data = await res.json();
+    if (data.error) {
+      toast('Send failed: ' + data.error);
+      return;
+    }
+    toast(`Queued — will send in ~${Math.round((data.delayMs || 0) / 1000)}s. Watch status below.`);
+    // Poll delivery status for a while so real WhatsApp ACKs (not just
+    // "the API accepted the request") show up here.
+    clearInterval(pollTimers[id]);
+    let ticks = 0;
+    pollTimers[id] = setInterval(async () => {
+      ticks++;
+      if (ticks > 20) { clearInterval(pollTimers[id]); return; }
+      const dres = await fetch(`${API_BASE}/api/accounts/${id}/deliveries`, {
+        headers: { 'X-Api-Key': acc.apiKey }
+      });
+      const ddata = await dres.json();
+      renderDeliveryLog(id, ddata.deliveries || []);
+    }, 3000);
+  } catch (e) {
+    toast('Send failed: ' + e.message);
+  }
+}
+
+function renderDeliveryLog(id, deliveries) {
+  const box = document.getElementById(`deliveryLog-${id}`);
+  if (!box) return;
+  if (!deliveries.length) {
+    box.innerHTML = '<div class="delivery-row"><span>No delivery data yet…</span></div>';
+    return;
+  }
+  box.innerHTML = deliveries.slice(0, 5).map(d => `
+    <div class="delivery-row">
+      <span>${escapeHtml(d.to)}</span>
+      <span class="ack-${d.status}">${escapeHtml(d.status)}</span>
+    </div>
+  `).join('');
 }
 
 document.getElementById('createForm').addEventListener('submit', async (e) => {

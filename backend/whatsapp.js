@@ -118,6 +118,31 @@ class WhatsAppManager {
       // Save credentials on update
       sock.ev.on('creds.update', saveCreds);
 
+      // ─── OUTGOING MESSAGE DELIVERY STATUS ──────────────────────────────
+      // sock.sendMessage() resolving just means Baileys handed the message
+      // to WhatsApp's servers — it does NOT mean the recipient's phone
+      // received it. WhatsApp reports real delivery via ack status updates:
+      // 1 = pending, 2 = server received it, 3 = delivered to device,
+      // 4 = read. Kept per-account so the dashboard/API can show it.
+      if (!Array.isArray(acc.deliveries)) acc.deliveries = [];
+      const ACK_NAMES = { 0: 'error', 1: 'pending', 2: 'server_ack', 3: 'delivered', 4: 'read' };
+      sock.ev.on('messages.update', (updates) => {
+        for (const u of updates) {
+          if (u.key?.fromMe && u.update?.status !== undefined) {
+            const name = ACK_NAMES[u.update.status] || `status_${u.update.status}`;
+            console.log(`[${acc.name}] ACK for ${u.key.id} (to ${u.key.remoteJid}): ${name}`);
+            const entry = acc.deliveries.find((d) => d.id === u.key.id);
+            if (entry) {
+              entry.status = name;
+              entry.updatedAt = Date.now();
+            } else {
+              acc.deliveries.push({ id: u.key.id, to: u.key.remoteJid, status: name, updatedAt: Date.now() });
+            }
+            if (acc.deliveries.length > 100) acc.deliveries.splice(0, acc.deliveries.length - 100);
+          }
+        }
+      });
+
       // ─── INCOMING MESSAGES ─────────────────────────────────────────────
       sock.ev.on('messages.upsert', async (m) => {
         // 'notify' = new messages arriving in real time (ignore history syncs / own reads)
@@ -228,14 +253,12 @@ class WhatsAppManager {
 
     // ── The actual @lid delivery fix ──────────────────────────────────
     // WhatsApp attaches the real phone-number JID directly on the message
-    // key as `senderPn` for LID-addressed direct chats — this is present
-    // immediately, no async lookup needed, and is far more reliable than
-    // signalRepository.lidMapping (which is best-effort / not always
-    // populated yet). Sending replies straight to a raw "@lid" JID can
-    // return success from Baileys with no thrown error, yet the message
-    // never actually reaches the recipient's phone — this is a known
-    // Baileys behavior, not a bug in this file. Preferring senderPn here
-    // fixes that: replies go to a normal "...@s.whatsapp.net" JID instead.
+    // key as `senderPn` for LID-addressed direct chats (Baileys v7+) — no
+    // async lookup needed. This is far more reliable than
+    // signalRepository.lidMapping, which is best-effort. Sending replies
+    // straight to a raw "@lid" JID can return success from Baileys with no
+    // thrown error, yet the message never actually reaches the recipient's
+    // phone — a known Baileys behavior. Preferring senderPn fixes that.
     let replyJid = jid;
     let resolvedNumber = null;
     if (isLid) {

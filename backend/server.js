@@ -209,10 +209,10 @@ function enqueueSend(acc, taskFn) {
 async function resolveSendJid(sock, to) {
   // Already a full JID (e.g. replying to a specific "...@lid" or
   // "...@s.whatsapp.net" address from an incoming message) — trust it as-is,
-  // except: a raw "@lid" JID is unreliable to send to directly (see the fix
-  // in whatsapp.js's _parseMessage — incoming messages now prefer the real
-  // senderPn JID instead). As a safety net here too, if we're handed a raw
-  // @lid, try resolving it to the real PN JID before sending.
+  // except: a raw "@lid" is unreliable to send to directly. Safety net: try
+  // resolving it to the real PN JID first (whatsapp.js's _parseMessage
+  // already prefers senderPn for new incoming messages, so this mainly
+  // covers older stored data or direct API calls with a raw @lid).
   if (typeof to === 'string' && to.includes('@')) {
     if (to.endsWith('@lid') && sock.signalRepository?.lidMapping?.getPNForLID) {
       try {
@@ -252,8 +252,12 @@ app.post('/api/send/text', async (req, res) => {
     const jid = await resolveSendJid(acc.sock, to);
     console.log(`[send/text] to=${to} -> resolved jid=${jid}`);
     const result = await enqueueSend(acc, () => acc.sock.sendMessage(jid, { text: message }));
+    if (result?.key?.id) {
+      if (!Array.isArray(acc.deliveries)) acc.deliveries = [];
+      acc.deliveries.push({ id: result.key.id, to: jid, status: 'sent_to_server', updatedAt: Date.now() });
+    }
     console.log(`[send/text] Baileys result:`, JSON.stringify(result?.key || result));
-    res.json({ ok: true, to: jid, delayMs: SEND_DELAY_MS });
+    res.json({ ok: true, to: jid, delayMs: SEND_DELAY_MS, messageId: result?.key?.id || null });
   } catch (err) {
     console.error(`[send/text] FAILED for to=${to}:`, err.message);
     res.status(500).json({ error: err.message });
@@ -339,6 +343,17 @@ app.post('/api/send/buttons', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// Delivery status for recently sent messages — shows the REAL WhatsApp ack
+// (pending/server_ack/delivered/read), not just "the API accepted the request".
+app.get('/api/accounts/:id/deliveries', (req, res) => {
+  const apiKey = req.headers['x-api-key'] || req.query.apiKey;
+  const acc = accounts[req.params.id];
+  if (!acc) return res.status(404).json({ error: 'Account not found' });
+  if (apiKey && apiKey !== acc.apiKey) return res.status(401).json({ error: 'Invalid API key' });
+  const list = (acc.deliveries || []).slice(-30).reverse();
+  res.json({ deliveries: list });
 });
 
 // ─── RECEIVE API (authenticated by API key) ────────────────────────────────────
