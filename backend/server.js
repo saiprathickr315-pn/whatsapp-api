@@ -251,11 +251,7 @@ app.post('/api/send/text', async (req, res) => {
   try {
     const jid = await resolveSendJid(acc.sock, to);
     console.log(`[send/text] to=${to} -> resolved jid=${jid}`);
-    const result = await enqueueSend(acc, () => acc.sock.sendMessage(jid, { text: message }));
-    if (result?.key?.id) {
-      if (!Array.isArray(acc.deliveries)) acc.deliveries = [];
-      acc.deliveries.push({ id: result.key.id, to: jid, status: 'sent_to_server', updatedAt: Date.now() });
-    }
+    const result = await enqueueSend(acc, () => manager.reliableSend(acc.id, jid, { text: message }));
     console.log(`[send/text] Baileys result:`, JSON.stringify(result?.key || result));
     res.json({ ok: true, to: jid, delayMs: SEND_DELAY_MS, messageId: result?.key?.id || null });
   } catch (err) {
@@ -277,7 +273,7 @@ app.post('/api/send/image', upload.single('image'), async (req, res) => {
   try {
     const jid = await resolveSendJid(acc.sock, to);
     await enqueueSend(acc, () =>
-      acc.sock.sendMessage(jid, {
+      manager.reliableSend(acc.id, jid, {
         image: req.file.buffer,
         caption: caption || '',
         mimetype: req.file.mimetype
@@ -302,7 +298,7 @@ app.post('/api/send/document', upload.single('file'), async (req, res) => {
   try {
     const jid = await resolveSendJid(acc.sock, to);
     await enqueueSend(acc, () =>
-      acc.sock.sendMessage(jid, {
+      manager.reliableSend(acc.id, jid, {
         document: req.file.buffer,
         mimetype: req.file.mimetype,
         fileName: filename || req.file.originalname,
@@ -332,7 +328,7 @@ app.post('/api/send/buttons', async (req, res) => {
       type: 1
     }));
     await enqueueSend(acc, () =>
-      acc.sock.sendMessage(jid, {
+      manager.reliableSend(acc.id, jid, {
         text,
         footer: footer || '',
         buttons: buttonList,

@@ -30,6 +30,11 @@ class WhatsAppManager {
     this.accounts = accounts;
     this.onStateChange = opts.onStateChange || (() => {}); // called whenever status/phone changes, for persistence
     this.reconnectAttempts = {}; // { accountId: number }
+    // How long to wait for a real "delivered" ack before assuming the
+    // stale-session bug and attempting a repair + resend. Kept generous
+    // (well above normal network latency) so we don't repair sessions
+    // that are just waiting on a slow/offline recipient.
+    this.DELIVERY_TIMEOUT_MS = Number(process.env.DELIVERY_REPAIR_TIMEOUT_MS || 20000);
   }
 
   async connect(id) {
@@ -46,12 +51,20 @@ class WhatsAppManager {
       const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
       const { version } = await fetchLatestBaileysVersion();
 
+      // Keep a handle to the (cached) key store so we can surgically clear a
+      // single contact's stale Signal session later — see _clearStaleSession.
+      // Using this cached store (not the raw file store) matters: it's the
+      // same object the live socket reads from, so a clear takes effect
+      // immediately instead of leaving a stale copy sitting in memory.
+      const keysStore = makeCacheableSignalKeyStore(state.keys, silentLogger);
+      acc.keysStore = keysStore;
+
       const sock = makeWASocket({
         version,
         logger: silentLogger,
         auth: {
           creds: state.creds,
-          keys: makeCacheableSignalKeyStore(state.keys, silentLogger)
+          keys: keysStore
         },
         printQRInTerminal: false,
         browser: ['WhatsApp Gateway', 'Chrome', '120.0.0'],
@@ -287,6 +300,92 @@ class WhatsAppManager {
         ? Number(msg.messageTimestamp) * 1000
         : Date.now()
     };
+  }
+
+  // ─── STALE SESSION REPAIR ────────────────────────────────────────────
+  // Known Baileys/WhatsApp issue (still open upstream, happens on the
+  // latest version too — this is NOT fixed by upgrading the library):
+  // occasionally the local encrypted "session" for one specific contact
+  // goes stale. Baileys still reports the send as successful (no error,
+  // no bad ack), but the recipient's phone can't decrypt it and just
+  // shows "Waiting for this message. This may take a while." forever.
+  // The fix is to clear ONLY that contact's session so WhatsApp
+  // re-does the encryption handshake on the next send. This never
+  // touches auth/login state or any other contact's session.
+  async _clearStaleSession(id, jid) {
+    const acc = this.accounts[id];
+    if (!acc || !acc.keysStore) return false;
+    try {
+      const sessionDir = path.join(AUTH_DIR, id);
+      if (!fs.existsSync(sessionDir)) return false;
+      const num = String(jid).split('@')[0].split(':')[0];
+      if (!num) return false;
+
+      const files = fs
+        .readdirSync(sessionDir)
+        .filter((f) => f === `session-${num}.json` || f.startsWith(`session-${num}.`));
+      if (files.length === 0) return false;
+
+      const toClear = {};
+      for (const f of files) {
+        const key = f.replace(/^session-/, '').replace(/\.json$/, '');
+        toClear[key] = null; // null = delete this entry, through the same store the live socket uses
+      }
+      await acc.keysStore.set({ session: toClear });
+      console.log(`[repair] cleared ${files.length} stale session entr${files.length === 1 ? 'y' : 'ies'} for ${jid} (${acc.name})`);
+      return true;
+    } catch (e) {
+      console.error(`[repair] failed to clear session for ${jid}:`, e.message);
+      return false;
+    }
+  }
+
+  // Watches a just-sent message in the background. If it's still stuck at
+  // "sent"/"server_ack" (never reached "delivered") after the timeout, that's
+  // the signature of the stale-session bug — repair and resend once.
+  async _watchAndRepair(id, jid, messageId, content) {
+    await new Promise((resolve) => setTimeout(resolve, this.DELIVERY_TIMEOUT_MS));
+    const acc = this.accounts[id];
+    if (!acc || !acc.sock) return;
+
+    const entry = (acc.deliveries || []).find((d) => d.id === messageId);
+    const stuck = !entry || entry.status === 'sent_to_server' || entry.status === 'pending' || entry.status === 'server_ack';
+    if (!stuck) return; // already delivered/read — all good, nothing to do
+
+    const repaired = await this._clearStaleSession(id, jid);
+    if (!repaired) return; // no session file to clear — likely just slow network, not this bug; leave it alone
+
+    console.log(`[repair] resending to ${jid} after session reset (was stuck as "${entry?.status || 'unknown'}")`);
+    try {
+      const retry = await acc.sock.sendMessage(jid, content);
+      if (retry?.key?.id) {
+        if (!Array.isArray(acc.deliveries)) acc.deliveries = [];
+        acc.deliveries.push({ id: retry.key.id, to: jid, status: 'sent_to_server', updatedAt: Date.now(), resentAfter: messageId });
+        if (acc.deliveries.length > 100) acc.deliveries.splice(0, acc.deliveries.length - 100);
+      }
+    } catch (e) {
+      console.error(`[repair] resend to ${jid} failed:`, e.message);
+    }
+  }
+
+  // Drop-in replacement for acc.sock.sendMessage(jid, content) that adds the
+  // stuck-delivery watchdog above. Same return shape (Baileys' send result),
+  // so callers don't need to change how they read the response.
+  async reliableSend(id, jid, content) {
+    const acc = this.accounts[id];
+    if (!acc || !acc.sock) throw new Error('Account not connected');
+
+    const result = await acc.sock.sendMessage(jid, content);
+    const messageId = result?.key?.id;
+    if (messageId) {
+      if (!Array.isArray(acc.deliveries)) acc.deliveries = [];
+      acc.deliveries.push({ id: messageId, to: jid, status: 'sent_to_server', updatedAt: Date.now() });
+      if (acc.deliveries.length > 100) acc.deliveries.splice(0, acc.deliveries.length - 100);
+
+      // Fire-and-forget: doesn't block or slow down the reply flow.
+      this._watchAndRepair(id, jid, messageId, content).catch(() => {});
+    }
+    return result;
   }
 
   async _forwardToWebhook(url, payload) {
