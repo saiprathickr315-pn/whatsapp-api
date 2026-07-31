@@ -70,7 +70,7 @@ const manager = new WhatsAppManager(accounts, {
 // Bump this string whenever a meaningful backend fix ships. Hit /ping after
 // a deploy and check this field — if it doesn't match, the deploy didn't
 // actually take (old process still running, wrong branch, cache, etc).
-const BUILD_TAG = 'lid-routing-fix-2026-07-19';
+const BUILD_TAG = 'media-by-url-and-location-2026-07-30';
 
 app.get('/ping', (req, res) => res.json({ ok: true, build: BUILD_TAG, accounts: Object.keys(accounts).length }));
 
@@ -255,49 +255,119 @@ app.post('/api/send/text', async (req, res) => {
   }
 });
 
-// Send image
+// ─── MEDIA-BY-LINK HELPER ───────────────────────────────────────────────────
+// Every media endpoint below accepts EITHER:
+//   (a) a direct file upload (multipart/form-data), same as before, OR
+//   (b) a JSON body with a "url" field — a Cloudinary / Google Drive
+//       (direct-download) / S3 / any publicly reachable HTTPS link.
+// Option (b) is the recommended path: the file never touches this server's
+// disk or RAM, which is exactly what keeps a free-tier host lightweight.
+// Baileys streams straight from the URL to WhatsApp's servers.
+function buildMediaMessage(kind, req) {
+  const { caption, filename, url } = req.body;
+
+  if (req.file) {
+    const content = { [kind]: req.file.buffer, mimetype: req.file.mimetype };
+    content.caption = caption || '';
+    if (kind === 'document') content.fileName = filename || req.file.originalname;
+    return content;
+  }
+
+  if (url) {
+    if (!/^https?:\/\//i.test(url)) {
+      throw new Error('url must be a public http:// or https:// link (e.g. a Cloudinary or Google Drive direct-download URL)');
+    }
+    const content = { [kind]: { url } };
+    content.caption = caption || '';
+    if (kind === 'document') content.fileName = filename || url.split('/').pop().split('?')[0] || 'file';
+    return content;
+  }
+
+  throw new Error(`Provide either a "${kind === 'document' ? 'file' : kind}" file upload (multipart/form-data) or a "url" field (JSON) with a downloadable link`);
+}
+
+// Send image — multipart file OR { to, url, caption }
 app.post('/api/send/image', upload.single('image'), async (req, res) => {
   const acc = resolveAccount(req, res);
   if (!acc) return;
   if (!requireConnected(acc, res)) return;
 
-  const { to, caption } = req.body;
+  const { to } = req.body;
   if (!to) return res.status(400).json({ error: 'to is required' });
-  if (!req.file) return res.status(400).json({ error: 'image file is required' });
 
   try {
+    const content = buildMediaMessage('image', req);
     const jid = await resolveSendJid(acc.sock, to);
-    await enqueueSend(acc, () =>
-      manager.reliableSend(acc.id, jid, {
-        image: req.file.buffer,
-        caption: caption || '',
-        mimetype: req.file.mimetype
-      })
-    );
+    await enqueueSend(acc, () => manager.reliableSend(acc.id, jid, content));
     res.json({ ok: true, to: jid, delayMs: SEND_DELAY_MS });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(400).json({ error: err.message });
   }
 });
 
-// Send document
+// Send video — multipart file OR { to, url, caption, gifPlayback }
+app.post('/api/send/video', upload.single('video'), async (req, res) => {
+  const acc = resolveAccount(req, res);
+  if (!acc) return;
+  if (!requireConnected(acc, res)) return;
+
+  const { to, gifPlayback } = req.body;
+  if (!to) return res.status(400).json({ error: 'to is required' });
+
+  try {
+    const content = buildMediaMessage('video', req);
+    if (gifPlayback === true || gifPlayback === 'true') content.gifPlayback = true;
+    const jid = await resolveSendJid(acc.sock, to);
+    await enqueueSend(acc, () => manager.reliableSend(acc.id, jid, content));
+    res.json({ ok: true, to: jid, delayMs: SEND_DELAY_MS });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Send document — multipart file OR { to, url, filename, caption }
 app.post('/api/send/document', upload.single('file'), async (req, res) => {
   const acc = resolveAccount(req, res);
   if (!acc) return;
   if (!requireConnected(acc, res)) return;
 
-  const { to, filename, caption } = req.body;
+  const { to } = req.body;
   if (!to) return res.status(400).json({ error: 'to is required' });
-  if (!req.file) return res.status(400).json({ error: 'file is required' });
+
+  try {
+    const content = buildMediaMessage('document', req);
+    const jid = await resolveSendJid(acc.sock, to);
+    await enqueueSend(acc, () => manager.reliableSend(acc.id, jid, content));
+    res.json({ ok: true, to: jid, delayMs: SEND_DELAY_MS });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Send location — { to, latitude, longitude, name?, address? }
+app.post('/api/send/location', async (req, res) => {
+  const acc = resolveAccount(req, res);
+  if (!acc) return;
+  if (!requireConnected(acc, res)) return;
+
+  const { to, latitude, longitude, name, address } = req.body;
+  if (!to) return res.status(400).json({ error: 'to is required' });
+  const lat = Number(latitude);
+  const lng = Number(longitude);
+  if (Number.isNaN(lat) || Number.isNaN(lng)) {
+    return res.status(400).json({ error: 'latitude and longitude are required and must be numbers' });
+  }
 
   try {
     const jid = await resolveSendJid(acc.sock, to);
     await enqueueSend(acc, () =>
       manager.reliableSend(acc.id, jid, {
-        document: req.file.buffer,
-        mimetype: req.file.mimetype,
-        fileName: filename || req.file.originalname,
-        caption: caption || ''
+        location: {
+          degreesLatitude: lat,
+          degreesLongitude: lng,
+          name: name || undefined,
+          address: address || undefined
+        }
       })
     );
     res.json({ ok: true, to: jid, delayMs: SEND_DELAY_MS });
@@ -386,6 +456,18 @@ function formatJid(to) {
   let num = to.replace(/[^0-9]/g, '');
   return `${num}@s.whatsapp.net`;
 }
+
+// ─── UPLOAD ERROR HANDLER ────────────────────────────────────────────────────
+// Multer throws before our route handlers run (e.g. file over the 16MB
+// limit). Without this, Express would return its default HTML error page.
+// Tip: for anything near/over 16MB, use the "url" field (Cloudinary/Drive
+// link) instead of a raw upload — it skips this limit entirely.
+app.use((err, req, res, next) => {
+  if (err && err.name === 'MulterError') {
+    return res.status(400).json({ error: `Upload error: ${err.message}. For larger files, send a "url" field pointing to a hosted link (Cloudinary, Google Drive, etc.) instead of uploading the file directly.` });
+  }
+  next(err);
+});
 
 // ─── GRACEFUL SHUTDOWN ───────────────────────────────────────────────────────
 // Ending sockets cleanly (instead of the process just being killed) reduces

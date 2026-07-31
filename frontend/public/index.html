@@ -3,237 +3,388 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Aroha Gateway · WhatsApp Dashboard</title>
+<title>Aroha Gateway · WhatsApp API</title>
 <style>
   :root {
-    --bg: #0f1115;
-    --panel: #171a21;
-    --panel-2: #1f2330;
-    --border: #2a2f3d;
-    --text: #e8eaf0;
-    --muted: #8b90a3;
-    --accent: #7c5cff;
-    --accent-2: #21d4a8;
-    --danger: #ff5c7a;
-    --warn: #ffb648;
+    --bg: #f4f5f7;
+    --surface: #ffffff;
+    --surface-2: #fafbfc;
+    --border: #e2e5eb;
+    --border-strong: #d3d7e0;
+    --text: #14171f;
+    --muted: #667085;
+    --muted-2: #98a2b3;
+    --brand: #16324f;
+    --brand-2: #24486f;
+    --accent: #0f8b74;
+    --accent-soft: #e5f5f1;
+    --warn: #b45309;
+    --warn-soft: #fdf1de;
+    --danger: #c0362c;
+    --danger-soft: #fbeae8;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Roboto, Helvetica, Arial, sans-serif;
+    --radius: 10px;
+    --shadow: 0 1px 2px rgba(20,23,31,0.04), 0 1px 8px rgba(20,23,31,0.03);
   }
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background: radial-gradient(1200px 600px at 20% -10%, #201a3a 0%, var(--bg) 55%);
+    font-family: var(--sans);
+    background: var(--bg);
     color: var(--text);
     min-height: 100vh;
-    padding: 32px 20px 80px;
+    -webkit-font-smoothing: antialiased;
   }
-  header {
-    max-width: 1000px;
-    margin: 0 auto 28px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 12px;
+  a { color: var(--brand-2); }
+
+  /* ── Top bar ─────────────────────────────────────────────────────── */
+  .topbar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 20;
+  }
+  .topbar-inner {
+    max-width: 1120px; margin: 0 auto;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px; gap: 16px; flex-wrap: wrap;
   }
   .brand { display: flex; align-items: center; gap: 12px; }
-  .brand .logo {
-    width: 40px; height: 40px; border-radius: 10px;
-    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  .brand .mark {
+    width: 34px; height: 34px; border-radius: 8px;
+    background: var(--brand);
     display: flex; align-items: center; justify-content: center;
-    font-weight: 700; font-size: 18px;
+    color: #fff; font-weight: 700; font-size: 15px; letter-spacing: -0.02em;
   }
-  .brand h1 { font-size: 20px; margin: 0; }
-  .brand span { color: var(--muted); font-size: 13px; }
-  main { max-width: 1000px; margin: 0 auto; }
+  .brand-text h1 { font-size: 15.5px; margin: 0; font-weight: 700; letter-spacing: -0.01em; }
+  .brand-text span { color: var(--muted); font-size: 12px; }
 
+  .tabs { display: flex; gap: 2px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 9px; padding: 3px; }
+  .tab-btn {
+    border: none; background: transparent; color: var(--muted);
+    font-size: 13px; font-weight: 600; padding: 7px 16px; border-radius: 7px; cursor: pointer;
+  }
+  .tab-btn.active { background: var(--brand); color: #fff; }
+
+  .status-pill {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 12.5px; color: var(--muted); font-weight: 500;
+  }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted-2); }
+  .status-dot.ok { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .status-dot.bad { background: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft); }
+
+  main { max-width: 1120px; margin: 0 auto; padding: 28px 24px 100px; }
+  .view { display: none; }
+  .view.active { display: block; }
+
+  /* ── Panels / cards ──────────────────────────────────────────────── */
   .panel {
-    background: var(--panel);
+    background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 20px;
-    margin-bottom: 20px;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 22px 24px;
+    margin-bottom: 18px;
   }
-  .panel h2 { margin: 0 0 14px; font-size: 15px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  .panel-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px; gap: 12px; flex-wrap: wrap; }
+  .panel h2 { margin: 0; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; font-weight: 700; }
+  .panel-sub { font-size: 12.5px; color: var(--muted-2); }
 
-  form.create { display: flex; gap: 10px; flex-wrap: wrap; }
-  input[type=text] {
-    flex: 1; min-width: 200px;
-    background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
-    padding: 11px 14px; border-radius: 9px; font-size: 14px;
+  .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .steps li { display: flex; gap: 10px; font-size: 13.5px; color: var(--text); line-height: 1.55; }
+  .steps li b { color: var(--brand); }
+  .step-no {
+    flex: none; width: 20px; height: 20px; border-radius: 50%; background: var(--surface-2);
+    border: 1px solid var(--border-strong); color: var(--muted); font-size: 11px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; margin-top: 1px;
   }
+  .note-inline { color: var(--muted); font-size: 12.5px; }
+
+  form.create { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+  .form-field { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 200px; }
+  .form-field label { font-size: 11.5px; color: var(--muted); font-weight: 600; }
+  input[type=text], input[type=number], input[type=url], select, textarea {
+    background: var(--surface); border: 1px solid var(--border-strong); color: var(--text);
+    padding: 9px 12px; border-radius: 7px; font-size: 13.5px; font-family: var(--sans); width: 100%;
+  }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--brand-2); box-shadow: 0 0 0 3px rgba(36,72,111,0.12); }
+  ::placeholder { color: var(--muted-2); }
+
   button {
-    cursor: pointer; border: none; border-radius: 9px; padding: 11px 18px;
-    font-size: 14px; font-weight: 600;
+    cursor: pointer; border: none; border-radius: 7px; padding: 9px 16px;
+    font-size: 13.5px; font-weight: 600; font-family: var(--sans);
   }
-  .btn-primary { background: var(--accent); color: white; }
-  .btn-secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
-  .btn-danger { background: rgba(255,92,122,0.12); color: var(--danger); border: 1px solid rgba(255,92,122,0.3); }
-  .btn-small { padding: 7px 12px; font-size: 12px; }
+  .btn-primary { background: var(--brand); color: #fff; }
+  .btn-primary:hover { background: var(--brand-2); }
+  .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); }
+  .btn-secondary:hover { background: var(--surface-2); }
+  .btn-danger { background: var(--danger-soft); color: var(--danger); border: 1px solid #f2c9c4; }
+  .btn-ghost { background: transparent; color: var(--muted); }
+  .btn-ghost.active { background: var(--brand); color: #fff; }
+  .btn-small { padding: 6px 11px; font-size: 12px; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
 
-  .accounts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+  .accounts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
   .account-card {
-    background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 16px;
+    background: var(--surface-2); border: 1px solid var(--border); border-left: 3px solid var(--muted-2);
+    border-radius: var(--radius); padding: 18px;
   }
-  .account-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
-  .account-name { font-weight: 700; font-size: 15px; }
+  .account-card.st-connected { border-left-color: var(--accent); }
+  .account-card.st-qr_pending { border-left-color: var(--warn); }
+  .account-card.st-logged_out, .account-card.st-error { border-left-color: var(--danger); }
+
+  .account-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; gap: 8px; }
+  .account-name { font-weight: 700; font-size: 14.5px; }
   .status-badge {
-    font-size: 11px; padding: 3px 9px; border-radius: 100px; font-weight: 700; text-transform: uppercase;
+    font-size: 10.5px; padding: 3px 9px; border-radius: 100px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+    white-space: nowrap;
   }
-  .status-connected { background: rgba(33,212,168,0.15); color: var(--accent-2); }
-  .status-qr_pending { background: rgba(255,182,72,0.15); color: var(--warn); }
-  .status-initializing, .status-disconnected { background: rgba(139,144,163,0.15); color: var(--muted); }
-  .status-logged_out, .status-error { background: rgba(255,92,122,0.15); color: var(--danger); }
+  .status-connected { background: var(--accent-soft); color: var(--accent); }
+  .status-qr_pending { background: var(--warn-soft); color: var(--warn); }
+  .status-initializing, .status-disconnected { background: #eef0f3; color: var(--muted); }
+  .status-logged_out, .status-error { background: var(--danger-soft); color: var(--danger); }
 
   .field { margin-bottom: 8px; }
-  .field label { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 3px; }
+  .field label { display: block; font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 3px; font-weight: 700; }
   .field .value-row { display: flex; align-items: center; gap: 6px; }
   .field .value {
-    font-family: "SF Mono", Consolas, monospace; font-size: 12.5px;
-    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    font-family: var(--mono); font-size: 12px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
     padding: 6px 9px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .copy-btn {
-    background: var(--panel); border: 1px solid var(--border); color: var(--muted);
-    padding: 6px 9px; border-radius: 6px; font-size: 12px;
+    background: var(--surface); border: 1px solid var(--border-strong); color: var(--muted);
+    padding: 6px 9px; border-radius: 6px; font-size: 11.5px;
   }
   .copy-btn:hover { color: var(--text); }
-
-  .account-id .value { color: var(--accent); font-weight: 700; }
+  .account-id .value { color: var(--brand-2); font-weight: 700; }
 
   .qr-box { text-align: center; margin: 12px 0; }
-  .qr-box img { width: 180px; height: 180px; border-radius: 8px; background: white; padding: 8px; }
-  .qr-hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .qr-box img { width: 168px; height: 168px; border-radius: 8px; background: white; padding: 8px; border: 1px solid var(--border); }
+  .qr-hint { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
 
-  .account-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
-  .empty { text-align: center; color: var(--muted); padding: 40px 0; }
+  .account-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .empty { text-align: center; color: var(--muted); padding: 40px 0; font-size: 13.5px; }
+
   .toast {
     position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-    background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
-    padding: 10px 18px; border-radius: 9px; font-size: 13px; opacity: 0; transition: opacity .2s;
-    pointer-events: none;
+    background: var(--brand); border: 1px solid var(--border); color: #fff;
+    padding: 10px 18px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s;
+    pointer-events: none; box-shadow: var(--shadow); max-width: 90vw;
   }
   .toast.show { opacity: 1; }
 
-  .hidden { display: none; }
-  .send-box, .usage-box {
-    margin-top: 12px; padding: 12px; background: var(--bg);
-    border: 1px solid var(--border); border-radius: 10px;
-  }
-  .value-input {
-    width: 100%; background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
-    padding: 8px 10px; border-radius: 7px; font-size: 13px; margin-top: 2px;
-  }
+  .hidden { display: none !important; }
+
+  .panel-body { margin-top: 12px; padding: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 9px; }
+  .subtabs { display: flex; gap: 4px; margin-bottom: 12px; flex-wrap: wrap; }
+  .subtabs button { background: transparent; color: var(--muted); border: 1px solid transparent; padding: 6px 11px; font-size: 12px; border-radius: 6px; }
+  .subtabs button.active { background: var(--surface-2); color: var(--brand); border-color: var(--border); }
+
+  .value-input { margin-bottom: 0; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .hr-tip { font-size: 11.5px; color: var(--muted-2); margin-top: 4px; }
+
   .code-block {
-    background: var(--panel-2); border: 1px solid var(--border); border-radius: 7px;
-    padding: 10px 12px; font-family: "SF Mono", Consolas, monospace; font-size: 11.5px;
-    white-space: pre-wrap; word-break: break-all; color: var(--accent-2); margin: 4px 0 0;
+    background: var(--brand); color: #d8e6f2; border-radius: 8px;
+    padding: 12px 14px; font-family: var(--mono); font-size: 11.8px;
+    white-space: pre-wrap; word-break: break-all; margin: 4px 0 0; line-height: 1.55;
   }
+  .code-block .k { color: #7fd9c4; }
   .delivery-log { margin-top: 10px; font-size: 12px; }
   .delivery-row {
     display: flex; justify-content: space-between; padding: 5px 0;
     border-bottom: 1px solid var(--border); color: var(--muted);
   }
-  .ack-delivered, .ack-read { color: var(--accent-2); font-weight: 700; }
+  .ack-delivered, .ack-read { color: var(--accent); font-weight: 700; }
   .ack-pending, .ack-server_ack, .ack-sent_to_server { color: var(--warn); font-weight: 700; }
   .ack-error { color: var(--danger); font-weight: 700; }
+
+  /* ── Documentation ───────────────────────────────────────────────── */
+  .doc-grid { display: grid; grid-template-columns: 200px 1fr; gap: 22px; align-items: start; }
+  .doc-nav { position: sticky; top: 76px; display: flex; flex-direction: column; gap: 2px; }
+  .doc-nav a {
+    text-decoration: none; color: var(--muted); font-size: 13px; padding: 7px 10px; border-radius: 7px; font-weight: 600;
+  }
+  .doc-nav a:hover { background: var(--surface-2); color: var(--text); }
+  .doc-section { scroll-margin-top: 80px; }
+  .doc-section h3 { font-size: 16px; margin: 0 0 6px; }
+  .doc-section p.desc { color: var(--muted); font-size: 13.5px; line-height: 1.6; margin: 0 0 12px; }
+  .method-pill {
+    display: inline-block; font-family: var(--mono); font-size: 11px; font-weight: 700;
+    padding: 2px 8px; border-radius: 5px; margin-right: 8px; background: var(--accent-soft); color: var(--accent);
+  }
+  .method-pill.get { background: #e6effd; color: #1d4ed8; }
+  .method-pill.delete { background: var(--danger-soft); color: var(--danger); }
+  .endpoint-path { font-family: var(--mono); font-size: 13px; color: var(--text); }
+  .param-table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin: 10px 0 16px; }
+  .param-table th { text-align: left; color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; padding: 4px 8px 6px 0; border-bottom: 1px solid var(--border); }
+  .param-table td { padding: 6px 8px 6px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .param-table code { font-family: var(--mono); font-size: 12px; color: var(--brand-2); }
+  .doc-picker { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .doc-picker select { max-width: 320px; }
+
+  @media (max-width: 760px) {
+    .doc-grid { grid-template-columns: 1fr; }
+    .doc-nav { position: static; flex-direction: row; flex-wrap: wrap; }
+    .row2 { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
 
-<header>
-  <div class="brand">
-    <div class="logo">A</div>
-    <div>
-      <h1>Aroha Gateway</h1>
-      <span>WhatsApp API dashboard — v2</span>
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <div class="mark">AG</div>
+      <div class="brand-text">
+        <h1>Aroha Gateway</h1>
+        <span>WhatsApp API · v2</span>
+      </div>
     </div>
+    <div class="tabs" role="tablist">
+      <button class="tab-btn active" id="tabBtn-dashboard" onclick="setView('dashboard')">Dashboard</button>
+      <button class="tab-btn" id="tabBtn-docs" onclick="setView('docs')">Documentation</button>
+    </div>
+    <div class="status-pill"><span class="status-dot" id="statusDot"></span><span id="pingStatus">checking server…</span></div>
   </div>
-  <div style="color: var(--muted); font-size: 13px;" id="pingStatus">checking server…</div>
-</header>
+</div>
 
 <main>
-  <div class="panel">
-    <h2>Quick Start</h2>
-    <div style="color: var(--muted); font-size: 13.5px; line-height: 1.6;">
-      1. Create an account below → scan the QR with WhatsApp (<b>Settings → Linked Devices → Link a Device</b>).<br/>
-      2. Once status shows <b>connected</b>, click <b>Send test message</b> on that account's card to try it directly from here.<br/>
-      3. Click <b>Sample usage</b> on any account for ready-to-run curl / JavaScript snippets using that account's real API key.<br/>
-      4. Watch the delivery status after a send — <span class="ack-delivered">delivered</span>/<span class="ack-delivered">read</span> means WhatsApp actually got it to the phone; <span class="ack-pending">pending</span>/<span class="ack-server_ack">server_ack</span> stuck for a while usually means the account is being rate-limited or restricted by WhatsApp, not a bug here.
-    </div>
-  </div>
 
-  <div class="panel">
-    <h2>Create Account</h2>
-    <form class="create" id="createForm">
-      <input type="text" id="nameInput" placeholder="Account name (e.g. sales team)" required />
-      <input type="text" id="webhookInput" placeholder="Webhook URL (optional)" />
-      <button type="submit" class="btn-primary">+ Add Account</button>
-    </form>
-  </div>
+  <!-- ══════════════════════════ DASHBOARD ══════════════════════════ -->
+  <section class="view active" id="view-dashboard">
 
-  <div class="panel">
-    <h2>Accounts</h2>
-    <div class="accounts-grid" id="accountsGrid">
-      <div class="empty">Loading…</div>
+    <div class="panel">
+      <div class="panel-head"><h2>Quick start</h2></div>
+      <ul class="steps">
+        <li><span class="step-no">1</span><span>Create an account below, then scan the QR with <b>WhatsApp → Settings → Linked Devices → Link a Device</b>.</span></li>
+        <li><span class="step-no">2</span><span>Once the status reads <b>connected</b>, expand the card to send a text, image, video, document, or location straight from here.</span></li>
+        <li><span class="step-no">3</span><span>For images, video and documents, paste a <b>Cloudinary / Google Drive / any public link</b> instead of uploading a file — the media streams straight to WhatsApp without touching this server's disk, which keeps things fast on free hosting.</span></li>
+        <li><span class="step-no">4</span><span>Open the <b>Documentation</b> tab for copy-paste curl and JavaScript for every endpoint, pre-filled with a real API key.</span></li>
+      </ul>
     </div>
-  </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>Create account</h2><span class="panel-sub">Up to 5 accounts</span></div>
+      <form class="create" id="createForm">
+        <div class="form-field">
+          <label>Account name</label>
+          <input type="text" id="nameInput" placeholder="e.g. Sales team" required />
+        </div>
+        <div class="form-field">
+          <label>Webhook URL (optional)</label>
+          <input type="text" id="webhookInput" placeholder="https://your-app.com/webhook" />
+        </div>
+        <button type="submit" class="btn-primary">Add account</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>Accounts</h2></div>
+      <div class="accounts-grid" id="accountsGrid">
+        <div class="empty">Loading…</div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ══════════════════════════ DOCUMENTATION ══════════════════════════ -->
+  <section class="view" id="view-docs">
+    <div class="panel">
+      <div class="doc-picker">
+        <label class="note-inline" style="font-weight:600;color:var(--text)">Example API key from:</label>
+        <select id="docAccountPicker" onchange="renderDocs()"></select>
+        <span class="note-inline" id="docPickerHint"></span>
+      </div>
+    </div>
+
+    <div class="doc-grid">
+      <nav class="doc-nav">
+        <a href="#doc-auth">Authentication</a>
+        <a href="#doc-text">Send text</a>
+        <a href="#doc-image">Send image</a>
+        <a href="#doc-video">Send video</a>
+        <a href="#doc-document">Send document</a>
+        <a href="#doc-location">Send location</a>
+        <a href="#doc-buttons">Send buttons</a>
+        <a href="#doc-messages">Receive messages</a>
+        <a href="#doc-deliveries">Delivery status</a>
+        <a href="#doc-webhook">Webhooks</a>
+        <a href="#doc-limits">Rate limits</a>
+      </nav>
+
+      <div id="docContent"><div class="empty">Create an account on the Dashboard tab to generate live examples.</div></div>
+    </div>
+  </section>
+
 </main>
 
 <div class="toast" id="toast"></div>
 
 <script>
 const API_BASE = '';
+let latestAccounts = [];
+const cardTab = {};       // { accountId: 'text'|'media'|'location' }
+const mediaKind = {};     // { accountId: 'image'|'video'|'document' }
+const openPanels = new Set();
+const pollTimers = {};
+
+/* ── view / tab switching ─────────────────────────────────────────── */
+function setView(name) {
+  document.getElementById('view-dashboard').classList.toggle('active', name === 'dashboard');
+  document.getElementById('view-docs').classList.toggle('active', name === 'docs');
+  document.getElementById('tabBtn-dashboard').classList.toggle('active', name === 'dashboard');
+  document.getElementById('tabBtn-docs').classList.toggle('active', name === 'docs');
+  if (name === 'docs') renderDocs();
+}
 
 function toast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 1600);
+  setTimeout(() => t.classList.remove('show'), 1800);
+}
+function copyText(text) { navigator.clipboard.writeText(text).then(() => toast('Copied: ' + text)); }
+function escapeHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-function copyText(text) {
-  navigator.clipboard.writeText(text).then(() => toast('Copied: ' + text));
-}
-
+/* ── health ping ──────────────────────────────────────────────────── */
 async function ping() {
+  const dot = document.getElementById('statusDot');
   try {
     const res = await fetch(API_BASE + '/ping');
     const data = await res.json();
-    document.getElementById('pingStatus').textContent =
-      `● online — ${data.accounts} account(s) tracked`;
-    document.getElementById('pingStatus').style.color = '#21d4a8';
+    document.getElementById('pingStatus').textContent = `Online — ${data.accounts} account(s) tracked`;
+    dot.className = 'status-dot ok';
   } catch (e) {
-    document.getElementById('pingStatus').textContent = '● offline / unreachable';
-    document.getElementById('pingStatus').style.color = '#ff5c7a';
+    document.getElementById('pingStatus').textContent = 'Offline / unreachable';
+    dot.className = 'status-dot bad';
   }
 }
 
-const openPanels = new Set(); // tracks which accountIds have an open send/usage panel
-
+/* ── accounts list ────────────────────────────────────────────────── */
 async function loadAccounts() {
   const grid = document.getElementById('accountsGrid');
-
-  // Don't yank the UI out from under someone mid-typing in a send box.
   if (document.activeElement && grid.contains(document.activeElement) &&
-      document.activeElement.tagName === 'INPUT') {
-    return;
+      ['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)) {
+    return; // don't yank the UI from under someone mid-input
   }
-
   try {
     const res = await fetch(API_BASE + '/api/accounts');
     const accounts = await res.json();
-
+    latestAccounts = accounts;
     if (!accounts.length) {
       grid.innerHTML = '<div class="empty">No accounts yet — create one above.</div>';
+      populateDocPicker();
       return;
     }
-
     grid.innerHTML = accounts.map(renderCard).join('');
-
-    // Re-open any panels the user had open before this refresh.
-    for (const key of openPanels) {
-      document.getElementById(key)?.classList.remove('hidden');
-    }
+    for (const key of openPanels) document.getElementById(key)?.classList.remove('hidden');
+    populateDocPicker();
   } catch (e) {
     grid.innerHTML = '<div class="empty">Could not load accounts — is the server running?</div>';
   }
@@ -241,8 +392,11 @@ async function loadAccounts() {
 
 function renderCard(a) {
   const statusClass = 'status-' + (a.status || 'unknown');
+  const tab = cardTab[a.id] || 'text';
+  const connected = a.status === 'connected';
+
   return `
-    <div class="account-card">
+    <div class="account-card st-${a.status}">
       <div class="account-top">
         <div class="account-name">${escapeHtml(a.name)}</div>
         <div class="status-badge ${statusClass}">${escapeHtml(a.status)}</div>
@@ -250,27 +404,18 @@ function renderCard(a) {
 
       <div class="field account-id">
         <label>Account ID</label>
-        <div class="value-row">
-          <div class="value">${a.id}</div>
-          <button class="copy-btn" onclick="copyText('${a.id}')">Copy</button>
-        </div>
+        <div class="value-row"><div class="value">${a.id}</div>
+          <button class="copy-btn" onclick="copyText('${a.id}')">Copy</button></div>
       </div>
-
       <div class="field">
         <label>Phone</label>
-        <div class="value-row">
-          <div class="value">${a.phone || '— not connected —'}</div>
-        </div>
+        <div class="value-row"><div class="value">${a.phone || '— not connected —'}</div></div>
       </div>
-
       <div class="field">
-        <label>API Key</label>
-        <div class="value-row">
-          <div class="value">${a.apiKey}</div>
-          <button class="copy-btn" onclick="copyText('${a.apiKey}')">Copy</button>
-        </div>
+        <label>API key</label>
+        <div class="value-row"><div class="value">${a.apiKey}</div>
+          <button class="copy-btn" onclick="copyText('${a.apiKey}')">Copy</button></div>
       </div>
-
       <div class="field">
         <label>Messages received</label>
         <div class="value-row"><div class="value">${a.messageCount ?? 0}</div></div>
@@ -280,74 +425,119 @@ function renderCard(a) {
         <div class="qr-box">
           <img src="${a.qr}" alt="QR code" />
           <div class="qr-hint">WhatsApp → Settings → Linked Devices → Link a Device</div>
-        </div>
-      ` : ''}
+        </div>` : ''}
 
       <div class="account-actions">
-        <button class="btn-secondary btn-small" onclick="reconnect('${a.id}')">↺ Reconnect</button>
-        <button class="btn-danger btn-small" onclick="removeAccount('${a.id}')">✕ Remove</button>
-        <button class="btn-secondary btn-small" onclick="toggleSend('${a.id}')">✉ Send test message</button>
-        <button class="btn-secondary btn-small" onclick="toggleUsage('${a.id}')">{ } Sample usage</button>
+        <button class="btn-secondary btn-small" onclick="reconnect('${a.id}')">Reconnect</button>
+        <button class="btn-danger btn-small" onclick="removeAccount('${a.id}')">Remove</button>
+        ${connected ? `<button class="btn-secondary btn-small" onclick="togglePanel('${a.id}')">Send a message ▾</button>` : ''}
       </div>
 
-      ${a.status === 'connected' ? `
-      <div class="send-box hidden" id="send-${a.id}">
-        <div class="field">
-          <label>To (phone number, e.g. 9198xxxxxxx with country code)</label>
-          <input type="text" class="value-input" id="sendTo-${a.id}" placeholder="9198xxxxxxx" />
+      ${connected ? `
+      <div class="panel-body hidden" id="panel-${a.id}">
+        <div class="subtabs">
+          <button class="${tab === 'text' ? 'active' : ''}" onclick="setCardTab('${a.id}','text')">Text</button>
+          <button class="${tab === 'media' ? 'active' : ''}" onclick="setCardTab('${a.id}','media')">Image / Video / Document</button>
+          <button class="${tab === 'location' ? 'active' : ''}" onclick="setCardTab('${a.id}','location')">Location</button>
         </div>
-        <div class="field">
-          <label>Message</label>
-          <input type="text" class="value-input" id="sendMsg-${a.id}" placeholder="Hello!" />
+
+        <div class="${tab === 'text' ? '' : 'hidden'}">
+          ${renderTextForm(a)}
         </div>
-        <button class="btn-primary btn-small" onclick="sendTest('${a.id}')">Send</button>
+        <div class="${tab === 'media' ? '' : 'hidden'}">
+          ${renderMediaForm(a)}
+        </div>
+        <div class="${tab === 'location' ? '' : 'hidden'}">
+          ${renderLocationForm(a)}
+        </div>
+
         <div class="delivery-log" id="deliveryLog-${a.id}"></div>
-      </div>
-      ` : ''}
-
-      <div class="usage-box hidden" id="usage-${a.id}">
-        <div class="field">
-          <label>curl</label>
-          <pre class="code-block">curl -X POST ${window.location.origin}/api/send/text \\
-  -H "Content-Type: application/json" \\
-  -H "X-Api-Key: ${a.apiKey}" \\
-  -d '{"to": "9198xxxxxxx", "message": "Hello from ${escapeHtml(a.name)}!"}'</pre>
-        </div>
-        <div class="field">
-          <label>Node.js / JavaScript</label>
-          <pre class="code-block">await fetch("${window.location.origin}/api/send/text", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    "X-Api-Key": "${a.apiKey}"
-  },
-  body: JSON.stringify({ to: "9198xxxxxxx", message: "Hello!" })
-});</pre>
-        </div>
-        <div class="field">
-          <label>Poll for incoming messages</label>
-          <pre class="code-block">curl "${window.location.origin}/api/messages?since=0" \\
-  -H "X-Api-Key: ${a.apiKey}"</pre>
-        </div>
-        <div class="qr-hint">Tip: "to" can be a plain number (with country code, no + or spaces) or a full JID copied from a received message's "jid" field.</div>
-      </div>
+      </div>` : ''}
     </div>
   `;
 }
 
-function escapeHtml(s) {
-  if (!s) return '';
-  return String(s).replace(/[&<>"']/g, (c) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[c]));
+function renderTextForm(a) {
+  return `
+    <div class="field"><label>To (with country code, no + or spaces)</label>
+      <input type="text" class="value-input" id="text-to-${a.id}" placeholder="9198xxxxxxx" /></div>
+    <div class="field"><label>Message</label>
+      <input type="text" class="value-input" id="text-msg-${a.id}" placeholder="Hello from Aroha Gateway!" /></div>
+    <button class="btn-primary btn-small" onclick="sendText('${a.id}')">Send</button>
+  `;
 }
 
+function renderMediaForm(a) {
+  const kind = mediaKind[a.id] || 'image';
+  return `
+    <div class="subtabs" style="margin-bottom:8px">
+      <button class="${kind === 'image' ? 'active' : ''}" onclick="setMediaKind('${a.id}','image')">Image</button>
+      <button class="${kind === 'video' ? 'active' : ''}" onclick="setMediaKind('${a.id}','video')">Video</button>
+      <button class="${kind === 'document' ? 'active' : ''}" onclick="setMediaKind('${a.id}','document')">Document</button>
+    </div>
+    <div class="field"><label>To</label>
+      <input type="text" class="value-input" id="media-to-${a.id}" placeholder="9198xxxxxxx" /></div>
+    <div class="field"><label>Media URL — Cloudinary, Google Drive (direct link), S3, etc.</label>
+      <input type="url" class="value-input" id="media-url-${a.id}" placeholder="https://res.cloudinary.com/.../file.jpg" /></div>
+    <div class="hr-tip">— or —</div>
+    <div class="field"><label>Upload a file instead (max 16MB)</label>
+      <input type="file" class="value-input" id="media-file-${a.id}" accept="${kind === 'image' ? 'image/*' : kind === 'video' ? 'video/*' : '*/*'}" /></div>
+    <div class="row2">
+      <div class="field"><label>Caption (optional)</label>
+        <input type="text" class="value-input" id="media-caption-${a.id}" /></div>
+      ${kind === 'document' ? `
+      <div class="field"><label>File name (optional)</label>
+        <input type="text" class="value-input" id="media-filename-${a.id}" placeholder="invoice.pdf" /></div>` : `<div></div>`}
+    </div>
+    ${kind === 'video' ? `
+    <label class="note-inline"><input type="checkbox" id="media-gif-${a.id}" /> Send as looping GIF (no sound)</label><br/>` : ''}
+    <button class="btn-primary btn-small" style="margin-top:8px" onclick="sendMedia('${a.id}')">Send ${kind}</button>
+  `;
+}
+
+function renderLocationForm(a) {
+  return `
+    <div class="field"><label>To</label>
+      <input type="text" class="value-input" id="loc-to-${a.id}" placeholder="9198xxxxxxx" /></div>
+    <div class="row2">
+      <div class="field"><label>Latitude</label>
+        <input type="text" class="value-input" id="loc-lat-${a.id}" placeholder="12.9716" /></div>
+      <div class="field"><label>Longitude</label>
+        <input type="text" class="value-input" id="loc-lng-${a.id}" placeholder="77.5946" /></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Name (optional)</label>
+        <input type="text" class="value-input" id="loc-name-${a.id}" placeholder="Office" /></div>
+      <div class="field"><label>Address (optional)</label>
+        <input type="text" class="value-input" id="loc-addr-${a.id}" placeholder="Bengaluru, India" /></div>
+    </div>
+    <button class="btn-primary btn-small" onclick="sendLocation('${a.id}')">Send location</button>
+  `;
+}
+
+function togglePanel(id) {
+  const key = `panel-${id}`;
+  document.getElementById(key)?.classList.toggle('hidden');
+  if (openPanels.has(key)) openPanels.delete(key); else openPanels.add(key);
+}
+function setCardTab(id, tab) { cardTab[id] = tab; rerenderCard(id); }
+function setMediaKind(id, kind) { mediaKind[id] = kind; rerenderCard(id); }
+function rerenderCard(id) {
+  const acc = latestAccounts.find(a => a.id === id);
+  if (!acc) return;
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = renderCard(acc).trim();
+  const el = [...document.querySelectorAll('.account-card')].find(c => c.querySelector('.account-id .value')?.textContent === id);
+  if (el) el.replaceWith(wrapper.firstElementChild);
+  document.getElementById(`panel-${id}`)?.classList.remove('hidden');
+}
+
+/* ── account actions ──────────────────────────────────────────────── */
 async function reconnect(id) {
   await fetch(`${API_BASE}/api/accounts/${id}/reconnect`, { method: 'POST' });
   toast('Reconnecting…');
   loadAccounts();
 }
-
 async function removeAccount(id) {
   if (!confirm('Remove this account? This cannot be undone.')) return;
   await fetch(`${API_BASE}/api/accounts/${id}`, { method: 'DELETE' });
@@ -355,94 +545,284 @@ async function removeAccount(id) {
   loadAccounts();
 }
 
-function toggleSend(id) {
-  const key = `send-${id}`;
-  document.getElementById(key)?.classList.toggle('hidden');
-  if (openPanels.has(key)) openPanels.delete(key); else openPanels.add(key);
-}
+function getApiKey(id) { return latestAccounts.find(a => a.id === id)?.apiKey; }
 
-function toggleUsage(id) {
-  const key = `usage-${id}`;
-  document.getElementById(key)?.classList.toggle('hidden');
-  if (openPanels.has(key)) openPanels.delete(key); else openPanels.add(key);
-}
-
-const pollTimers = {};
-
-async function sendTest(id) {
-  const to = document.getElementById(`sendTo-${id}`).value.trim();
-  const message = document.getElementById(`sendMsg-${id}`).value.trim();
+async function sendText(id) {
+  const to = document.getElementById(`text-to-${id}`).value.trim();
+  const message = document.getElementById(`text-msg-${id}`).value.trim();
   if (!to || !message) { toast('Enter a number and a message'); return; }
-
-  const acc = (await (await fetch(API_BASE + '/api/accounts')).json()).find(a => a.id === id);
-  if (!acc) return;
-
   try {
     const res = await fetch(API_BASE + '/api/send/text', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Api-Key': acc.apiKey },
+      headers: { 'Content-Type': 'application/json', 'X-Api-Key': getApiKey(id) },
       body: JSON.stringify({ to, message })
     });
     const data = await res.json();
-    if (data.error) {
-      toast('Send failed: ' + data.error);
-      return;
-    }
-    toast(`Queued — will send in ~${Math.round((data.delayMs || 0) / 1000)}s. Watch status below.`);
-    // Poll delivery status for a while so real WhatsApp ACKs (not just
-    // "the API accepted the request") show up here.
-    clearInterval(pollTimers[id]);
-    let ticks = 0;
-    pollTimers[id] = setInterval(async () => {
-      ticks++;
-      if (ticks > 20) { clearInterval(pollTimers[id]); return; }
-      const dres = await fetch(`${API_BASE}/api/accounts/${id}/deliveries`, {
-        headers: { 'X-Api-Key': acc.apiKey }
+    if (data.error) { toast('Send failed: ' + data.error); return; }
+    toast(`Queued — sending in ~${Math.round((data.delayMs || 0) / 1000)}s`);
+    watchDeliveries(id);
+  } catch (e) { toast('Send failed: ' + e.message); }
+}
+
+async function sendMedia(id) {
+  const kind = mediaKind[id] || 'image';
+  const to = document.getElementById(`media-to-${id}`).value.trim();
+  const url = document.getElementById(`media-url-${id}`).value.trim();
+  const fileInput = document.getElementById(`media-file-${id}`);
+  const caption = document.getElementById(`media-caption-${id}`).value.trim();
+  const filenameEl = document.getElementById(`media-filename-${id}`);
+  const gifEl = document.getElementById(`media-gif-${id}`);
+  const file = fileInput && fileInput.files[0];
+
+  if (!to) { toast('Enter a recipient'); return; }
+  if (!url && !file) { toast('Provide a media URL or choose a file'); return; }
+
+  const endpoint = `/api/send/${kind}`;
+  const apiKey = getApiKey(id);
+
+  try {
+    let res;
+    if (file) {
+      const fd = new FormData();
+      fd.append('to', to);
+      fd.append(kind === 'document' ? 'file' : kind, file);
+      if (caption) fd.append('caption', caption);
+      if (filenameEl && filenameEl.value.trim()) fd.append('filename', filenameEl.value.trim());
+      if (gifEl && gifEl.checked) fd.append('gifPlayback', 'true');
+      res = await fetch(API_BASE + endpoint, { method: 'POST', headers: { 'X-Api-Key': apiKey }, body: fd });
+    } else {
+      const body = { to, url, caption: caption || undefined };
+      if (filenameEl && filenameEl.value.trim()) body.filename = filenameEl.value.trim();
+      if (gifEl && gifEl.checked) body.gifPlayback = true;
+      res = await fetch(API_BASE + endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Api-Key': apiKey },
+        body: JSON.stringify(body)
       });
+    }
+    const data = await res.json();
+    if (data.error) { toast('Send failed: ' + data.error); return; }
+    toast(`Queued — sending in ~${Math.round((data.delayMs || 0) / 1000)}s`);
+    watchDeliveries(id);
+  } catch (e) { toast('Send failed: ' + e.message); }
+}
+
+async function sendLocation(id) {
+  const to = document.getElementById(`loc-to-${id}`).value.trim();
+  const latitude = document.getElementById(`loc-lat-${id}`).value.trim();
+  const longitude = document.getElementById(`loc-lng-${id}`).value.trim();
+  const name = document.getElementById(`loc-name-${id}`).value.trim();
+  const address = document.getElementById(`loc-addr-${id}`).value.trim();
+  if (!to || !latitude || !longitude) { toast('Enter recipient, latitude and longitude'); return; }
+  try {
+    const res = await fetch(API_BASE + '/api/send/location', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Api-Key': getApiKey(id) },
+      body: JSON.stringify({ to, latitude, longitude, name: name || undefined, address: address || undefined })
+    });
+    const data = await res.json();
+    if (data.error) { toast('Send failed: ' + data.error); return; }
+    toast(`Queued — sending in ~${Math.round((data.delayMs || 0) / 1000)}s`);
+    watchDeliveries(id);
+  } catch (e) { toast('Send failed: ' + e.message); }
+}
+
+function watchDeliveries(id) {
+  clearInterval(pollTimers[id]);
+  let ticks = 0;
+  pollTimers[id] = setInterval(async () => {
+    ticks++;
+    if (ticks > 20) { clearInterval(pollTimers[id]); return; }
+    try {
+      const dres = await fetch(`${API_BASE}/api/accounts/${id}/deliveries`, { headers: { 'X-Api-Key': getApiKey(id) } });
       const ddata = await dres.json();
       renderDeliveryLog(id, ddata.deliveries || []);
-    }, 3000);
-  } catch (e) {
-    toast('Send failed: ' + e.message);
-  }
+    } catch (e) {}
+  }, 3000);
 }
 
 function renderDeliveryLog(id, deliveries) {
   const box = document.getElementById(`deliveryLog-${id}`);
   if (!box) return;
-  if (!deliveries.length) {
-    box.innerHTML = '<div class="delivery-row"><span>No delivery data yet…</span></div>';
-    return;
-  }
+  if (!deliveries.length) { box.innerHTML = '<div class="delivery-row"><span>No delivery data yet…</span></div>'; return; }
   box.innerHTML = deliveries.slice(0, 5).map(d => `
-    <div class="delivery-row">
-      <span>${escapeHtml(d.to)}</span>
-      <span class="ack-${d.status}">${escapeHtml(d.status)}</span>
-    </div>
+    <div class="delivery-row"><span>${escapeHtml(d.to)}</span><span class="ack-${d.status}">${escapeHtml(d.status)}</span></div>
   `).join('');
 }
 
+/* ── create account ───────────────────────────────────────────────── */
 document.getElementById('createForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const name = document.getElementById('nameInput').value.trim();
   const webhookUrl = document.getElementById('webhookInput').value.trim();
   if (!name) return;
-
   const res = await fetch(API_BASE + '/api/accounts', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, webhookUrl: webhookUrl || undefined })
   });
   const data = await res.json();
-  if (data.error) {
-    toast('Error: ' + data.error);
-  } else {
+  if (data.error) { toast('Error: ' + data.error); }
+  else {
     toast('Account created — scan the QR when it appears');
     document.getElementById('nameInput').value = '';
     document.getElementById('webhookInput').value = '';
   }
   loadAccounts();
 });
+
+/* ══════════════════════════ DOCUMENTATION TAB ══════════════════════════ */
+function populateDocPicker() {
+  const sel = document.getElementById('docAccountPicker');
+  const prev = sel.value;
+  sel.innerHTML = latestAccounts.length
+    ? latestAccounts.map(a => `<option value="${a.id}">${escapeHtml(a.name)} (${a.status})</option>`).join('')
+    : '<option value="">No accounts yet</option>';
+  if (prev && latestAccounts.some(a => a.id === prev)) sel.value = prev;
+  if (document.getElementById('view-docs').classList.contains('active')) renderDocs();
+}
+
+function renderDocs() {
+  const sel = document.getElementById('docAccountPicker');
+  const acc = latestAccounts.find(a => a.id === sel.value) || latestAccounts[0];
+  const hint = document.getElementById('docPickerHint');
+  const content = document.getElementById('docContent');
+  const origin = window.location.origin;
+
+  if (!acc) {
+    hint.textContent = '';
+    content.innerHTML = '<div class="empty">Create an account on the Dashboard tab to generate live, copy-paste examples.</div>';
+    return;
+  }
+  hint.textContent = acc.status === 'connected' ? '' : `Status: ${acc.status} — sends will 503 until this account is connected.`;
+  const KEY = acc.apiKey;
+
+  content.innerHTML = `
+    <div class="panel doc-section" id="doc-auth">
+      <h3>Authentication</h3>
+      <p class="desc">Every <span class="method-pill">send / read</span> call is authenticated with the account's API key, sent as a header (or a query param as a fallback).</p>
+      <pre class="code-block">X-Api-Key: ${KEY}
+<span class="k"># or</span>
+${origin}/api/messages?apiKey=${KEY}</pre>
+    </div>
+
+    <div class="panel doc-section" id="doc-text">
+      <h3><span class="method-pill">POST</span><span class="endpoint-path">/api/send/text</span></h3>
+      <p class="desc">Send a plain text message.</p>
+      <table class="param-table"><tr><th>Field</th><th>Required</th><th>Notes</th></tr>
+        <tr><td><code>to</code></td><td>yes</td><td>Phone number with country code, or a full JID from a received message</td></tr>
+        <tr><td><code>message</code></td><td>yes</td><td>Text to send</td></tr></table>
+      <pre class="code-block">curl -X POST ${origin}/api/send/text \\
+  -H "Content-Type: application/json" \\
+  -H "X-Api-Key: ${KEY}" \\
+  -d '{"to": "9198xxxxxxx", "message": "Hello from ${escapeHtml(acc.name)}!"}'</pre>
+    </div>
+
+    <div class="panel doc-section" id="doc-image">
+      <h3><span class="method-pill">POST</span><span class="endpoint-path">/api/send/image</span></h3>
+      <p class="desc">Send an image either by <b>link</b> (recommended — no server storage used) or by uploading a file directly.</p>
+      <table class="param-table"><tr><th>Field</th><th>Required</th><th>Notes</th></tr>
+        <tr><td><code>to</code></td><td>yes</td><td>Recipient</td></tr>
+        <tr><td><code>url</code></td><td>one of url/file</td><td>Public Cloudinary / Google Drive (direct-download) / S3 link</td></tr>
+        <tr><td><code>image</code></td><td>one of url/file</td><td>Multipart file upload, max 16MB</td></tr>
+        <tr><td><code>caption</code></td><td>no</td><td>Caption text</td></tr></table>
+      <pre class="code-block"><span class="k"># by link (recommended)</span>
+curl -X POST ${origin}/api/send/image \\
+  -H "Content-Type: application/json" \\
+  -H "X-Api-Key: ${KEY}" \\
+  -d '{"to": "9198xxxxxxx", "url": "https://res.cloudinary.com/demo/image/upload/sample.jpg", "caption": "Check this out"}'
+
+<span class="k"># by direct upload</span>
+curl -X POST ${origin}/api/send/image \\
+  -H "X-Api-Key: ${KEY}" \\
+  -F "to=9198xxxxxxx" -F "caption=Check this out" -F "image=@/path/to/photo.jpg"</pre>
+    </div>
+
+    <div class="panel doc-section" id="doc-video">
+      <h3><span class="method-pill">POST</span><span class="endpoint-path">/api/send/video</span></h3>
+      <p class="desc">Send a video by link or upload. Set <code>gifPlayback</code> to send it as a silent, looping GIF-style video.</p>
+      <table class="param-table"><tr><th>Field</th><th>Required</th><th>Notes</th></tr>
+        <tr><td><code>to</code></td><td>yes</td><td>Recipient</td></tr>
+        <tr><td><code>url</code></td><td>one of url/file</td><td>Public downloadable link</td></tr>
+        <tr><td><code>video</code></td><td>one of url/file</td><td>Multipart file upload, max 16MB</td></tr>
+        <tr><td><code>caption</code></td><td>no</td><td>Caption text</td></tr>
+        <tr><td><code>gifPlayback</code></td><td>no</td><td><code>true</code> to loop silently like a GIF</td></tr></table>
+      <pre class="code-block">curl -X POST ${origin}/api/send/video \\
+  -H "Content-Type: application/json" \\
+  -H "X-Api-Key: ${KEY}" \\
+  -d '{"to": "9198xxxxxxx", "url": "https://your-cloudinary.com/video.mp4", "caption": "Demo clip"}'</pre>
+    </div>
+
+    <div class="panel doc-section" id="doc-document">
+      <h3><span class="method-pill">POST</span><span class="endpoint-path">/api/send/document</span></h3>
+      <p class="desc">Send any file (PDF, spreadsheet, etc.) by link or upload.</p>
+      <table class="param-table"><tr><th>Field</th><th>Required</th><th>Notes</th></tr>
+        <tr><td><code>to</code></td><td>yes</td><td>Recipient</td></tr>
+        <tr><td><code>url</code></td><td>one of url/file</td><td>Public downloadable link</td></tr>
+        <tr><td><code>file</code></td><td>one of url/file</td><td>Multipart file upload, max 16MB</td></tr>
+        <tr><td><code>filename</code></td><td>no</td><td>Display name shown in WhatsApp</td></tr>
+        <tr><td><code>caption</code></td><td>no</td><td>Caption text</td></tr></table>
+      <pre class="code-block">curl -X POST ${origin}/api/send/document \\
+  -H "Content-Type: application/json" \\
+  -H "X-Api-Key: ${KEY}" \\
+  -d '{"to": "9198xxxxxxx", "url": "https://drive.google.com/uc?export=download&id=FILE_ID", "filename": "invoice.pdf"}'</pre>
+      <p class="note-inline">Google Drive tip: share the file as "Anyone with the link", then use <code>https://drive.google.com/uc?export=download&id=FILE_ID</code> as the URL.</p>
+    </div>
+
+    <div class="panel doc-section" id="doc-location">
+      <h3><span class="method-pill">POST</span><span class="endpoint-path">/api/send/location</span></h3>
+      <p class="desc">Send a pinned location.</p>
+      <table class="param-table"><tr><th>Field</th><th>Required</th><th>Notes</th></tr>
+        <tr><td><code>to</code></td><td>yes</td><td>Recipient</td></tr>
+        <tr><td><code>latitude</code>, <code>longitude</code></td><td>yes</td><td>Decimal degrees</td></tr>
+        <tr><td><code>name</code>, <code>address</code></td><td>no</td><td>Shown under the pin</td></tr></table>
+      <pre class="code-block">curl -X POST ${origin}/api/send/location \\
+  -H "Content-Type: application/json" \\
+  -H "X-Api-Key: ${KEY}" \\
+  -d '{"to": "9198xxxxxxx", "latitude": 12.9716, "longitude": 77.5946, "name": "Bengaluru Office"}'</pre>
+    </div>
+
+    <div class="panel doc-section" id="doc-buttons">
+      <h3><span class="method-pill">POST</span><span class="endpoint-path">/api/send/buttons</span></h3>
+      <p class="desc">Send a text message with quick-reply buttons.</p>
+      <pre class="code-block">curl -X POST ${origin}/api/send/buttons \\
+  -H "Content-Type: application/json" \\
+  -H "X-Api-Key: ${KEY}" \\
+  -d '{"to": "9198xxxxxxx", "text": "How can we help?", "footer": "${escapeHtml(acc.name)}", "buttons": ["Sales", "Support", "Billing"]}'</pre>
+    </div>
+
+    <div class="panel doc-section" id="doc-messages">
+      <h3><span class="method-pill get">GET</span><span class="endpoint-path">/api/messages</span></h3>
+      <p class="desc">Poll for incoming messages. Supports <code>?since=&lt;ms timestamp&gt;</code> and <code>?limit=&lt;n&gt;</code>. Each message includes a <code>jid</code> field — always reply using that, not a re-typed phone number.</p>
+      <pre class="code-block">curl "${origin}/api/messages?since=0" \\
+  -H "X-Api-Key: ${KEY}"
+
+<span class="k"># clear stored messages once you've consumed them</span>
+curl -X DELETE ${origin}/api/messages \\
+  -H "X-Api-Key: ${KEY}"</pre>
+    </div>
+
+    <div class="panel doc-section" id="doc-deliveries">
+      <h3><span class="method-pill get">GET</span><span class="endpoint-path">/api/accounts/${'{id}'}/deliveries</span></h3>
+      <p class="desc">Real WhatsApp delivery acknowledgements for recently sent messages — pending → server_ack → delivered → read.</p>
+      <pre class="code-block">curl "${origin}/api/accounts/${acc.id}/deliveries" \\
+  -H "X-Api-Key: ${KEY}"</pre>
+    </div>
+
+    <div class="panel doc-section" id="doc-webhook">
+      <h3><span class="method-pill">POST</span><span class="endpoint-path">/api/accounts/${'{id}'}/webhook</span></h3>
+      <p class="desc">Set or clear the webhook this account forwards incoming messages to (leave <code>webhookUrl</code> blank to remove it). Your endpoint receives a POST with the same shape as a <code>/api/messages</code> entry, plus <code>accountId</code>.</p>
+      <pre class="code-block">curl -X POST ${origin}/api/accounts/${acc.id}/webhook \\
+  -H "Content-Type: application/json" \\
+  -d '{"webhookUrl": "https://your-app.com/webhook"}'</pre>
+    </div>
+
+    <div class="panel doc-section" id="doc-limits">
+      <h3>Rate limits &amp; good practice</h3>
+      <p class="desc">Outgoing messages on this account are queued and spaced a few seconds apart automatically — see the <code>delayMs</code> value returned by every send call — to avoid patterns WhatsApp flags as bot-like. Sending faster than that isn't possible by design; queue your own messages upstream instead of retrying rapidly. Uploaded files are capped at 16MB — for anything bigger, always use the <code>url</code> field.</p>
+    </div>
+  `;
+}
 
 ping();
 loadAccounts();
