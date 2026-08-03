@@ -6,10 +6,30 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { jidNormalizedUser } = require('@whiskeysockets/baileys');
 const WhatsAppManager = require('./whatsapp');
-const { loadAccountsMeta, saveAccountsMeta } = require('./accountStore');
+const { createAccountStore } = require('./accountStore');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// ─── PERSISTENCE BACKEND ─────────────────────────────────────────────────
+// On Render's Free plan the container's local disk is wiped on every
+// restart — including the automatic sleep/wake after ~15 min of no traffic,
+// not just a manual redeploy. That silent wipe is why accounts/sessions
+// used to disappear on their own. Setting REDIS_URL (a free Upstash Redis
+// instance works well) moves account metadata AND WhatsApp login sessions
+// off the container entirely, so both survive every restart. Without
+// REDIS_URL, everything falls back to local files exactly like before
+// (fine for local dev, or hosts with real persistent disks).
+let redis = null;
+if (process.env.REDIS_URL) {
+  const Redis = require('ioredis');
+  redis = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: 3 });
+  redis.on('error', (e) => console.error('[redis] connection error:', e.message));
+  console.log('[persistence] using Redis (accounts + sessions survive restarts)');
+} else {
+  console.log('[persistence] REDIS_URL not set — using local disk (will NOT survive Render Free restarts)');
+}
+const { loadAccountsMeta, saveAccountsMeta } = createAccountStore(redis);
 
 // Middleware
 app.use(cors());
@@ -39,18 +59,19 @@ function scheduleSave() {
 
 const manager = new WhatsAppManager(accounts, {
   onStateChange: () => scheduleSave(),
+  redis,
 });
 
 // ─── RESTORE ON BOOT ────────────────────────────────────────────────────────────
-// If accounts.json survived (e.g. this was a crash/restart, not a fresh
-// deploy), reload the account list and try to resume each session. Baileys
-// will reuse its saved session files under ./sessions/<id> if those also
-// survived — otherwise it'll fall back to needing a fresh QR scan.
-(function restoreOnBoot() {
-  const persisted = loadAccountsMeta();
+// Reload the account list (from Redis if configured, else accounts.json) and
+// resume each session. With Redis this now also survives a full Render Free
+// restart/redeploy, not just a crash — that's the actual fix for accounts
+// disappearing on their own.
+(async function restoreOnBoot() {
+  const persisted = await loadAccountsMeta();
   const ids = Object.keys(persisted);
   if (ids.length === 0) return;
-  console.log(`Restoring ${ids.length} account(s) from accounts.json...`);
+  console.log(`Restoring ${ids.length} account(s)...`);
   for (const id of ids) {
     accounts[id] = {
       ...persisted[id],
@@ -72,7 +93,12 @@ const manager = new WhatsAppManager(accounts, {
 // actually take (old process still running, wrong branch, cache, etc).
 const BUILD_TAG = 'media-by-url-and-location-2026-07-30';
 
-app.get('/ping', (req, res) => res.json({ ok: true, build: BUILD_TAG, accounts: Object.keys(accounts).length }));
+app.get('/ping', (req, res) => res.json({
+  ok: true,
+  build: BUILD_TAG,
+  accounts: Object.keys(accounts).length,
+  persistence: redis ? 'redis' : 'local-disk (will not survive Render Free restarts!)'
+}));
 
 // ─── FRONTEND ROUTES ───────────────────────────────────────────────────────────
 app.get('/', (req, res) => {

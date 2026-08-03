@@ -6,6 +6,7 @@ const {
   fetchLatestBaileysVersion,
   jidNormalizedUser
 } = require('@whiskeysockets/baileys');
+const { useRedisAuthState, clearRedisAuthState } = require('./redisAuthState');
 const qrcode = require('qrcode');
 const pino = require('pino');
 const fs = require('fs');
@@ -30,6 +31,7 @@ class WhatsAppManager {
   constructor(accounts, opts = {}) {
     this.accounts = accounts;
     this.onStateChange = opts.onStateChange || (() => {}); // called whenever status/phone changes, for persistence
+    this.redis = opts.redis || null; // if set, auth state lives in Redis (survives restarts); otherwise local files
     this.reconnectAttempts = {}; // { accountId: number }
     // How long to wait for a real "delivered" ack before assuming the
     // stale-session bug and attempting a repair + resend. Kept generous
@@ -46,10 +48,12 @@ class WhatsAppManager {
     if (!Array.isArray(acc.messages)) acc.messages = [];
 
     const sessionDir = path.join(AUTH_DIR, id);
-    if (!fs.existsSync(sessionDir)) fs.mkdirSync(sessionDir, { recursive: true });
+    if (!this.redis && !fs.existsSync(sessionDir)) fs.mkdirSync(sessionDir, { recursive: true });
 
     try {
-      const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
+      const { state, saveCreds } = this.redis
+        ? await useRedisAuthState(this.redis, id)
+        : await useMultiFileAuthState(sessionDir);
       const { version } = await fetchLatestBaileysVersion();
 
       // Keep a handle to the (cached) key store so we can surgically clear a
@@ -114,7 +118,13 @@ class WhatsAppManager {
             // Logged out (e.g. unlinked from phone, or a real conflict) — clear
             // session, this account needs a fresh QR scan.
             acc.status = 'logged_out';
-            fs.rmSync(sessionDir, { recursive: true, force: true });
+            if (this.redis) {
+              clearRedisAuthState(this.redis, id).catch((e) =>
+                console.error(`[${acc.name}] failed to clear Redis session:`, e.message)
+              );
+            } else {
+              fs.rmSync(sessionDir, { recursive: true, force: true });
+            }
             this.onStateChange(id, acc);
           }
         }

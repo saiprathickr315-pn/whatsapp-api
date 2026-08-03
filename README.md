@@ -2,6 +2,30 @@
 
 Multi-account WhatsApp API gateway built with Baileys + Express.
 
+## Why accounts were disappearing (and how this is now fixed)
+On **Render's Free plan**, the container's local disk is wiped on **every
+restart** — not just a manual redeploy, but also the automatic sleep/wake
+cycle Render does after ~15 minutes with no traffic. Since `accounts.json`
+and the WhatsApp login sessions (`backend/sessions/`) used to live only on
+that disk, a routine sleep/wake looked exactly like your accounts silently
+getting deleted.
+
+**Fix:** set a `REDIS_URL` environment variable (a free
+[Upstash Redis](https://upstash.com) database works well) and both the
+account list and WhatsApp login sessions are stored there instead — which
+survives restarts, redeploys, and sleep/wake. Without `REDIS_URL` it falls
+back to local files exactly like before (fine for local development).
+
+### Set it up (2 minutes, free)
+1. Go to [upstash.com](https://upstash.com) → sign up (free) → **Create Database** → pick the region closest to your Render region.
+2. On the database page, copy the **`ioredis` / "Redis URL"** connection string (starts with `rediss://`).
+3. In your Render service → **Environment** → add `REDIS_URL` = that string → save (this redeploys once).
+4. Visit `https://YOUR-APP.onrender.com/ping` — the response should show `"persistence": "redis"`. If it still says `local-disk`, the env var isn't set correctly.
+
+After this, accounts and QR-scanned sessions survive restarts. (A real WhatsApp
+logout — unlinking the device from your phone — will still require a fresh
+QR scan; that's expected WhatsApp behavior, not a bug.)
+
 ## What's new in v2
 - Account list persists to `backend/accounts.json` so a crash/restart (not a
   full redeploy) doesn't wipe your accounts
@@ -27,7 +51,7 @@ treat `backend` as a broken submodule link instead of real files.
 3. **Build Command:** `cd backend && npm install`
 4. **Start Command:** `node backend/server.js`
 5. **Instance Type:** Free
-6. Environment variable: `SEND_DELAY_MS=7000` (adjust if you want more/less spacing)
+6. Environment variables: `SEND_DELAY_MS=7000` (adjust if you want more/less spacing), and **`REDIS_URL`** (see "Why accounts were disappearing" above — without this, accounts won't survive restarts on the Free plan)
 7. Deploy
 
 ### 3. Keep it alive (prevents session loss from sleep/wake)
